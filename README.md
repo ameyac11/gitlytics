@@ -12,6 +12,8 @@ View 14-day views, clones, referrers, and popular paths for **all** your reposit
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Built%20with-Streamlit-ff4b4b)](https://streamlit.io/)
 
+**🔴 Try the live demo:** [git-traffic-viewer.streamlit.app](https://git-traffic-viewer.streamlit.app/)
+
 ---
 
 ## ✨ Features
