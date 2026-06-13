@@ -66,7 +66,11 @@ pip install -r requirements.txt
 4. Select the **`repo`** scope — required to read traffic data for private repositories
 5. Click **Generate token** and **copy it immediately**
 
-> **🔒 Security note:** For the security of your GitHub tokens, this dashboard is intentionally kept local-only and not deployed to the web. Your token is completely safe, used only on your machine, and never sent to any external server.
+> **🔒 Security Note:**
+> 
+> **If running locally:** Your token is completely safe, used only on your machine, and never sent to any external server. It is kept only in memory during your active session.
+> 
+> **If using a deployed web version:** Please ensure you **delete/revoke your GitHub Personal Access Token** from GitHub immediately after fetching your report. While the app does not save your token anywhere (it is cleared immediately upon refreshing or closing the tab), deleting the token from GitHub is the safest practice.
 
 ---
 

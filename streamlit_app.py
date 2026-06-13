@@ -544,17 +544,16 @@ def _render_dashboard_toolbar(df: pd.DataFrame | None) -> tuple[str, int]:
                 else:
                     st.button("⬇ CSV", key="dl_btn_disabled", disabled=True)
             with btn2:
-                if st.button("↻ Reload", key="fetch_btn"):
+                def _reload_cb():
                     st.session_state.fetched = False
                     st.session_state.df = None
                     st.session_state._is_fetching = True
                     st.session_state.repo_filter = ""
-                    st.rerun()
+                st.button("↻ Reload", key="fetch_btn", on_click=_reload_cb)
             with btn3:
-                if st.button("Logout", key="logout_btn"):
-                    for k, v in DEFAULTS.items():
-                        st.session_state[k] = v
-                    st.rerun()
+                def _logout_cb():
+                    st.session_state.clear()
+                st.button("Logout", key="logout_btn", on_click=_logout_cb)
 
     return search, top_n
 
@@ -569,7 +568,7 @@ def _render_dashboard_hero() -> None:
             <div>
                 <p class="dashboard-hero-title">GitHub Traffic Dashboard</p>
                 <div class="dash-header-user">{st.session_state.name} · @{st.session_state.username}</div>
-                <div class="dashboard-hero-subtitle">14-day analytics for all your repos, updated {updated}. Local, private, and fast.</div>
+                <div class="dashboard-hero-subtitle">14-day analytics for all your repos, updated {updated}. Private and fast (token cleared on refresh).</div>
                 <a class="dashboard-hero-link" href="{GITHUB_REPO}" target="_blank" rel="noopener noreferrer">
                     {GITHUB_LOGO}<span>Open repository</span>
                 </a>
@@ -763,7 +762,7 @@ _SIDEBAR_LOGO = """
 _SIDEBAR_FOOTER = f"""
 <div style="margin-top: 1rem; padding-top: 10px; border-top: 1px solid #21262d; text-align: center;">
     <div style="font-size:0.68rem;color:#8b949e;line-height:1.6;">
-        🔒 Token stays on your machine
+        🔒 Token is not saved (cleared on refresh)
     </div>
     <a class="sidebar-repo-link" href="{GITHUB_REPO}" target="_blank" rel="noopener noreferrer">
        {GITHUB_LOGO}<span>GitHub Repository</span></a>
@@ -843,7 +842,7 @@ if not st.session_state.authenticated:
             GitHub Traffic Dashboard
         </h1>
         <p style="font-size:0.85rem;color:#8b949e;margin:0;">
-            14-day analytics for all your repos — 100% local, fully private.
+            14-day analytics for all your repos — fully private (token cleared on refresh).
             <a href="{GITHUB_REPO}" target="_blank" rel="noopener noreferrer"
                style="color:#58a6ff;text-decoration:none;display:inline-flex;align-items:center;gap:0.35rem;vertical-align:middle;">
                {GITHUB_LOGO}<span>View on GitHub</span></a>
@@ -861,6 +860,9 @@ if not st.session_state.authenticated:
             <li>Paste your <strong style="color:#c9d1d9">GitHub Personal Access Token</strong> in the sidebar</li>
             <li>Click <strong style="color:#3fb950">Connect to GitHub</strong></li>
         </ol>
+        <div style="margin-top: 1rem; padding: 0.75rem; background: #3d1214; border: 1px solid #6e3035; border-radius: 8px;">
+            <p style="font-size: 0.8rem; color: #ff7b72; margin: 0; line-height: 1.5;"><strong>⚠️ Security Notice:</strong> This app does not save your token. It is kept only in the session memory and is completely cleared upon refresh. If you are using a deployed web version of this dashboard, it is highly recommended to <strong>delete/revoke your token on GitHub</strong> after downloading your report.</p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
