@@ -1,18 +1,41 @@
-# 🚀 GitHub Traffic Dashboard
+<div align="center">
 
-![GitHub Traffic Dashboard](assets/gittracker_thumnail1.png)
+# 🚀 GitHub Traffic Dashboard 📊
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Built%20with-Streamlit-ff4b4b)](https://streamlit.io/)
+[![Automation](https://img.shields.io/badge/Automation-Companion%20App-green?logo=github-actions)](https://github.com/ameyac11/Github_Traffic_Automation)
+
+**Beautiful GitHub traffic analytics for all your repositories — public and private.** 📈
+
+Please consider giving this project a ⭐ if you find it helpful!
+
+</div>
+
+---
+
+**🔴 Try the live demo:** [git-traffic-dashboard.streamlit.app](https://git-traffic-dashboard.streamlit.app/)
 
 A local-only GitHub traffic analytics tool with two modes:
 - **🖥️ Web UI** — Beautiful Streamlit dashboard (recommended)
 - **⌨️ CLI** — Terminal output + CSV export
 
-View 14-day views, clones, referrers, and popular paths for **all** your repositories — public and private. Everything runs on your machine. Your token never leaves your device.
+View 14-day views, clones, referrers, and popular paths for **all** your repositories. Everything runs on your machine. Your token never leaves your device.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Built%20with-Streamlit-ff4b4b)](https://streamlit.io/)
+![GitHub Traffic Dashboard](assets/gittracker_thumnail1.png)
 
-**🔴 Try the live demo:** [git-traffic-board.streamlit.app](https://git-traffic-dashboard.streamlit.app/)
+---
+
+## 🚨 The 14-Day Catch (And How to Fix It!)
+
+> **⚠️ Did you know?** GitHub normally **only saves your repository traffic data for 14 days**. After two weeks, your valuable views and clones data is permanently deleted.
+
+**Don't lose your data!** We built a companion automation tool that runs silently in the background every 13 days using GitHub Actions to fetch and save your data permanently. 
+
+👉 **[Set up GitHub Traffic Automation here](https://github.com/ameyac11/Github_Traffic_Automation)** (It takes literally 2 minutes to set up!)
+
+Once you have your automated data saved, you can seamlessly plug it right into this dashboard to visualize your beautiful, long-term historical charts.
 
 ---
 
@@ -20,7 +43,9 @@ View 14-day views, clones, referrers, and popular paths for **all** your reposit
 
 | Feature | Streamlit UI | CLI |
 |---|:---:|:---:|
+| **Dual Mode Interface** (Live API & CSV Upload) | ✅ | ❌ |
 | Token input (no hardcoding) | ✅ | ✅ |
+| Upload & visualize historical CSV data | ✅ | ❌ |
 | Summary metrics (views, clones, stars, forks) | ✅ | ✅ |
 | Bar & line charts per repository | ✅ | ❌ |
 | Per-repo daily views & clones chart | ✅ | ✅ |

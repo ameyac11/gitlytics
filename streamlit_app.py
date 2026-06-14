@@ -17,6 +17,7 @@ from github_traffic_fetch import (
     fetch_all_traffic,
     to_csv_bytes,
 )
+from process_csv import process_uploaded_csv
 
 GITHUB_REPO = "https://github.com/ameyac11/github-traffic-viewer"
 GITHUB_LOGO = """
@@ -57,6 +58,7 @@ html, body, [class*="css"], .stApp {
 /* Hide Streamlit deploy button and branding — keep sidebar toggle visible */
 #MainMenu                            { visibility: hidden; }
 footer                               { visibility: hidden; }
+header, [data-testid="stHeader"]     { display: none !important; }
 [data-testid="stDecoration"]         { display: none !important; }
 [data-testid="stStatusWidget"]       { display: none !important; }
 [data-testid="stHeaderDeployButton"],
@@ -78,8 +80,10 @@ section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
 }
 
 /* Tighten main area — pull content up, use top space */
-.stApp [data-testid="stAppViewContainer"] .main .block-container {
-    padding-top: 0.5rem !important;
+.stApp [data-testid="stAppViewContainer"] .main .block-container,
+.block-container,
+[data-testid="stMainBlockContainer"] {
+    padding-top: 0.25rem !important;
     padding-bottom: 1rem !important;
     max-width: 100% !important;
 }
@@ -430,6 +434,98 @@ hr { border: none; border-top: 1px solid #21262d; margin: 1rem 0; }
 .github-corner-btn svg {
     fill: currentColor;
 }
+
+/* Hide 200MB limit text in file uploader */
+[data-testid="stFileUploader"] small {
+    display: none !important;
+}
+
+/* Custom styling for the landing page */
+div[data-testid="stRadio"] > div[role="radiogroup"] {
+    display: flex !important;
+    gap: 0.75rem !important;
+    background: transparent !important;
+    width: 100% !important;
+}
+div[data-testid="stRadio"] label {
+    flex: 1 !important;
+    background: #0d1117 !important;
+    border: 1px solid #21262d !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 1rem !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    transition: all 0.2s ease !important;
+}
+div[data-testid="stRadio"] label:has(input:checked) {
+    background: #111b29 !important;
+    border: 1px solid #1f6feb !important;
+    border-bottom: 4px solid #1f6feb !important;
+}
+div[data-testid="stRadio"] label [data-testid="stMarker"] {
+    display: none !important;
+}
+div[data-testid="stRadio"] label [data-testid="stMarkdownContainer"] {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+div[data-testid="stRadio"] label [data-testid="stMarkdownContainer"] p {
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    color: #c9d1d9 !important;
+    margin: 0 !important;
+}
+div[data-testid="stRadio"] label:has(input:checked) [data-testid="stMarkdownContainer"] p {
+    color: #58a6ff !important;
+}
+div[data-testid="stRadio"] label:nth-child(1) [data-testid="stMarkdownContainer"]::after {
+    content: "Real-time data from GitHub API";
+    font-size: 0.75rem;
+    color: #8b949e;
+    font-weight: 400;
+    margin-top: 0.25rem;
+}
+div[data-testid="stRadio"] label:nth-child(2) [data-testid="stMarkdownContainer"]::after {
+    content: "Upload and analyze CSV files";
+    font-size: 0.75rem;
+    color: #8b949e;
+    font-weight: 400;
+    margin-top: 0.25rem;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:has(.landing-card) {
+    background: #0d1117 !important;
+    border: 1px solid #21262d !important;
+    border-radius: 12px !important;
+    padding: 1.25rem !important;
+    margin-bottom: 1rem !important;
+}
+
+.stButton > button[kind="primary"] {
+    background: #1f6feb !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.5rem !important;
+    font-weight: 600 !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #388bfd !important;
+}
+
+[data-testid="stTextInput"] div[data-baseweb="input"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 8px !important;
+}
+[data-testid="stTextInput"] input {
+    color: #c9d1d9 !important;
+}
+
+div[data-testid="stVerticalBlock"] > div:has(> div > div > .landing-spacer) {
+    padding: 0 !important; margin: 0 !important; height: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -454,6 +550,8 @@ DEFAULTS = {
 for key, val in DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = val
+
+
 
 def _connect_with_token(token_input: str) -> None:
     """Validate a GitHub PAT and update session state on success."""
@@ -485,10 +583,10 @@ def _render_dashboard_toolbar(df: pd.DataFrame | None) -> tuple[str, int]:
     """Compact control bar: filters, top N, and actions."""
 
     with st.container(border=True):
-        search_col, slider_col, actions_col = st.columns(
-            [2.7, 1.6, 3.3],
+        search_col, slider_col, csv_col, reload_col, logout_col = st.columns(
+            [2.8, 1.8, 1.0, 1.0, 1.0],
             vertical_alignment="bottom",
-            gap="small",
+            gap="medium",
         )
 
         with search_col:
@@ -506,50 +604,39 @@ def _render_dashboard_toolbar(df: pd.DataFrame | None) -> tuple[str, int]:
             if df is not None and not df.empty:
                 top_n = st.slider(
                     "Show top N",
-                    5,
-                    min(30, len(df)),
-                    min(10, len(df)),
-                    key="top_n_slider",
-                    label_visibility="collapsed",
+                    5, min(30, len(df)), min(10, len(df)),
+                    key="top_n_slider", label_visibility="collapsed",
                 )
             else:
                 top_n = 10
                 st.slider(
                     "Show top N",
-                    5,
-                    30,
-                    10,
-                    key="top_n_slider",
-                    label_visibility="collapsed",
-                    disabled=True,
+                    5, 30, 10,
+                    key="top_n_slider", label_visibility="collapsed", disabled=True,
                 )
 
-        with actions_col:
-            st.markdown('<p class="toolbar-label">Actions</p>', unsafe_allow_html=True)
-            btn1, btn2, btn3 = st.columns([1.0, 1.05, 0.95], gap="small", vertical_alignment="center")
-            with btn1:
-                if df is not None and not df.empty:
-                    fname = f"github_traffic_{datetime.now(_tz.utc).strftime('%Y-%m-%d')}.csv"
-                    st.download_button(
-                        label="⬇ CSV",
-                        data=to_csv_bytes(df),
-                        file_name=fname,
-                        mime="text/csv",
-                        key="dl_btn",
-                    )
-                else:
-                    st.button("⬇ CSV", key="dl_btn_disabled", disabled=True)
-            with btn2:
-                def _reload_cb():
-                    st.session_state.fetched = False
-                    st.session_state.df = None
-                    st.session_state._is_fetching = True
-                    st.session_state.repo_filter = ""
-                st.button("↻ Reload", key="fetch_btn", on_click=_reload_cb)
-            with btn3:
-                def _logout_cb():
-                    st.session_state.clear()
-                st.button("Logout", key="logout_btn", on_click=_logout_cb)
+        with csv_col:
+            if df is not None and not df.empty:
+                fname = f"github_traffic_{datetime.now(_tz.utc).strftime('%Y-%m-%d')}.csv"
+                st.download_button(
+                    label="⬇ CSV", data=to_csv_bytes(df), file_name=fname,
+                    mime="text/csv", key="dl_btn", use_container_width=True
+                )
+            else:
+                st.button("⬇ CSV", key="dl_btn_disabled", disabled=True, use_container_width=True)
+
+        with reload_col:
+            def _reload_cb():
+                st.session_state.fetched = False
+                st.session_state.df = None
+                st.session_state._is_fetching = True
+                st.session_state.repo_filter = ""
+            st.button("↻ Reload", key="fetch_btn", on_click=_reload_cb, use_container_width=True)
+
+        with logout_col:
+            def _logout_cb():
+                st.session_state.clear()
+            st.button("Logout", key="logout_btn", on_click=_logout_cb, use_container_width=True)
 
     return search, top_n
 
@@ -601,38 +688,62 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
 
     st.markdown("<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8b949e;margin:0.5rem 0 0.5rem 0;'>Overview — Last 14 Days</p>", unsafe_allow_html=True)
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Repositories",    f"{len(active_df):,}")
-    c2.metric("Total Views",     f"{int(active_df['Total Views'].sum()):,}")
-    c3.metric("Unique Visitors", f"{int(active_df['Unique Visitors'].sum()):,}")
-    c4.metric("Total Clones",    f"{int(active_df['Total Clones'].sum()):,}")
-    c5.metric("⭐ Stars",         f"{int(active_df['Stars'].sum()):,}")
-    c6.metric("🍴 Forks",         f"{int(active_df['Forks'].sum()):,}")
-
-    st.markdown("<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8b949e;margin:1.25rem 0 0.5rem 0;'>Top Repositories by Traffic</p>", unsafe_allow_html=True)
+    metrics_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">Repositories</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{len(active_df):,}</div>
+        </div>
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">Total Views</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{int(active_df['Total Views'].sum()):,}</div>
+        </div>
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">Unique Visitors</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{int(active_df['Unique Visitors'].sum()):,}</div>
+        </div>
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">Total Clones</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{int(active_df['Total Clones'].sum()):,}</div>
+        </div>
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">⭐ Stars</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{int(active_df['Stars'].sum()):,}</div>
+        </div>
+        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 1.25rem;">
+            <div style="color: #8b949e; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem; white-space: nowrap;">🍴 Forks</div>
+            <div style="color: #c9d1d9; font-size: 1.75rem; font-weight: 700;">{int(active_df['Forks'].sum()):,}</div>
+        </div>
+    </div>
+    """
+    st.markdown(metrics_html, unsafe_allow_html=True)
 
     active_df = active_df.copy()
     active_df["_short"] = active_df["Repository"].str.split("/").str[1]
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("<p style='font-size:0.8rem;font-weight:600;color:#c9d1d9;margin-bottom:0.5rem;'>👁️ Views</p>", unsafe_allow_html=True)
-        top_v = active_df.nlargest(top_n, "Total Views").set_index("_short")[["Total Views", "Unique Visitors"]]
-        st.bar_chart(top_v, color=["#58a6ff", "#3fb950"])
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>👁️ Top Repositories by Views</h4>", unsafe_allow_html=True)
+            top_v = active_df.nlargest(top_n, "Total Views").set_index("_short")[["Total Views", "Unique Visitors"]]
+            st.bar_chart(top_v, color=["#58a6ff", "#3fb950"])
 
     with col2:
-        st.markdown("<p style='font-size:0.8rem;font-weight:600;color:#c9d1d9;margin-bottom:0.5rem;'>📥 Clones</p>", unsafe_allow_html=True)
-        top_c = active_df.nlargest(top_n, "Total Clones").set_index("_short")[["Total Clones", "Unique Cloners"]]
-        st.bar_chart(top_c, color=["#ff7b72", "#e3b341"])
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>📥 Top Repositories by Clones</h4>", unsafe_allow_html=True)
+            top_c = active_df.nlargest(top_n, "Total Clones").set_index("_short")[["Total Clones", "Unique Cloners"]]
+            st.bar_chart(top_c, color=["#ff7b72", "#e3b341"])
 
     col3, col4 = st.columns(2)
     with col3:
-        st.markdown("<p style='font-size:0.8rem;font-weight:600;color:#c9d1d9;margin-bottom:0.5rem;'>⭐ Stars</p>", unsafe_allow_html=True)
-        st.bar_chart(active_df.nlargest(top_n, "Stars").set_index("_short")[["Stars"]], color=["#e3b341"])
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>⭐ Most Starred</h4>", unsafe_allow_html=True)
+            st.bar_chart(active_df.nlargest(top_n, "Stars").set_index("_short")[["Stars"]], color=["#e3b341"])
 
     with col4:
-        st.markdown("<p style='font-size:0.8rem;font-weight:600;color:#c9d1d9;margin-bottom:0.5rem;'>🍴 Forks</p>", unsafe_allow_html=True)
-        st.bar_chart(active_df.nlargest(top_n, "Forks").set_index("_short")[["Forks"]], color=["#a371f7"])
+        with st.container(border=True):
+            st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>🍴 Most Forked</h4>", unsafe_allow_html=True)
+            st.bar_chart(active_df.nlargest(top_n, "Forks").set_index("_short")[["Forks"]], color=["#a371f7"])
 
     st.markdown("<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8b949e;margin:2rem 0 0.75rem 0;'>All Repositories</p>", unsafe_allow_html=True)
 
@@ -747,70 +858,6 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
                         )
 
 
-_SIDEBAR_LOGO = """
-<div style="text-align:center; padding: 0.25rem 0 1rem 0;">
-    <div style="font-size:2rem;">🚀</div>
-    <div style="font-size:0.95rem; font-weight:700; color:#e6edf3;">GitHub Traffic</div>
-    <div style="font-size:0.7rem; color:#8b949e; margin-top:2px;">Local Dashboard</div>
-</div>
-"""
-
-_SIDEBAR_FOOTER = f"""
-<div style="margin-top: 1rem; padding-top: 10px; border-top: 1px solid #21262d; text-align: center;">
-    <div style="font-size:0.68rem;color:#8b949e;line-height:1.6;">
-        🔒 Token is not saved (cleared on refresh)
-    </div>
-    <a class="sidebar-repo-link" href="{GITHUB_REPO}" target="_blank" rel="noopener noreferrer">
-       {GITHUB_LOGO}<span>GitHub Repository</span></a>
-</div>
-"""
-
-
-def _render_sidebar(mode: str) -> None:
-    """Render sidebar for auth, fetching, or connected states — one layout per mode."""
-    slot = st.sidebar.empty()
-    with slot.container():
-        st.markdown(_SIDEBAR_LOGO, unsafe_allow_html=True)
-
-        if mode == "auth":
-            st.markdown(
-                "<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.08em;"
-                "text-transform:uppercase;color:#8b949e;margin-bottom:4px;'>Your GitHub Token</p>",
-                unsafe_allow_html=True,
-            )
-            sidebar_token = st.text_input(
-                "token",
-                type="password",
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx",
-                label_visibility="collapsed",
-                key="token_widget_sidebar",
-            )
-            st.caption("Needs `repo` scope for private repos")
-            if st.button("🔐  Connect to GitHub", key="connect_btn_sidebar"):
-                _connect_with_token(sidebar_token)
-            st.markdown(_SIDEBAR_FOOTER, unsafe_allow_html=True)
-
-        elif mode == "fetching":
-            st.markdown(
-                "<div class='sidebar-fetching-note'>"
-                "Fetching traffic data...<br>Keep this tab open while the dashboard loads."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-
-        else:
-            st.markdown("""
-            <div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;
-                        padding:12px;text-align:center;margin-top:0.5rem;">
-                <div style="font-size:0.8rem;color:#3fb950;font-weight:600;">✓ Connected</div>
-                <div style="font-size:0.72rem;color:#8b949e;margin-top:4px;">
-                    Use the toolbar at the top to manage your session.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown(_SIDEBAR_FOOTER, unsafe_allow_html=True)
-
-
 def _fetch_traffic_data() -> None:
     """Load traffic into session state, then rerun for a clean UI."""
     with st.status("Fetching GitHub Traffic Data...", expanded=True) as status:
@@ -828,60 +875,271 @@ def _fetch_traffic_data() -> None:
     st.rerun()
 
 
-# ── Landing page — not logged in ──────────────────────────────────────────────
-if not st.session_state.authenticated:
-    _render_sidebar("auth")
+# ── Landing page — not logged in or fetching ──────────────────────────────────
+if not st.session_state.fetched or st.session_state.df is None:
+    if "landing_mode" not in st.session_state:
+        st.session_state.landing_mode = "Live API Fetch"
+        
+    st.markdown("<style>[data-testid='stSidebar'] {display: none !important;} [data-testid='collapsedControl'] {display: none !important;}</style>", unsafe_allow_html=True)
+    
+    # Header
+    st.markdown("""<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; margin-top: 0;">
+<div style="display: flex; align-items: center; gap: 0.75rem;">
+<div style="background: #161b22; padding: 0.5rem; border-radius: 8px; border: 1px solid #21262d; display: flex; align-items: center; justify-content: center;">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+</div>
+<div>
+<h1 style="margin: 0; font-size: 1.35rem; font-weight: 700; color: #e6edf3;">GitHub Traffic Dashboard</h1>
+<p style="margin: 0; color: #8b949e; font-size: 0.85rem;">Monitor your repository traffic with real-time insights</p>
+</div>
+</div>
+<a href="https://github.com/ameyac11/github-traffic-viewer" target="_blank" style="padding: 0.4rem 0.8rem; border: 1px solid #21262d; border-radius: 8px; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; background: #161b22; font-size: 0.8rem; font-weight: 600;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+Docs
+</a>
+</div>""", unsafe_allow_html=True)
+    
+    left_col, empty_col, right_col = st.columns([1.2, 0.1, 1.0])
+    
+    with left_col:
+        mode = st.radio(
+            "Select Input Mode:",
+            ["📈 Live API Fetch", "☁️ CSV Upload"],
+            index=0 if st.session_state.landing_mode == "Live API Fetch" else 1,
+            label_visibility="collapsed",
+            horizontal=True,
+            disabled=st.session_state.authenticated  # Disable while fetching
+        )
+        st.session_state.landing_mode = mode.replace("📈 ", "").replace("☁️ ", "")
+        
+        if st.session_state.landing_mode == "Live API Fetch":
+            st.markdown("""<div style="background: #0d1117; border: 1px solid #21262d; border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+<div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem;">
+<div style="background: #1f6feb; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0; font-size: 0.8rem;">i</div>
+<div>
+<h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 600;">What does this do?</h4>
+<p style="color: #8b949e; margin: 0; font-size: 0.85rem; line-height: 1.4;">This mode connects directly to the GitHub API using your Personal Access Token (PAT). It fetches your repository traffic data (views, clones, stars, etc.) and visualizes it instantly.</p>
+</div>
+</div>
+<div style="background: rgba(210, 153, 34, 0.1); border: 1px solid rgba(210, 153, 34, 0.2); border-radius: 8px; padding: 1rem; display: flex; gap: 0.75rem; margin-bottom: 1.25rem;">
+<div style="color: #d29922; font-size: 1.1rem; flex-shrink: 0;">⚠️</div>
+<div>
+<h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.9rem; font-weight: 600;">14-Day Data Limit</h4>
+<p style="color: #8b949e; margin: 0; font-size: 0.8rem; line-height: 1.4;">GitHub only provides up to 14 days of traffic history via the API. Data older than 2 weeks will not be available.</p>
+</div>
+</div>
+<div style="background: rgba(31, 111, 235, 0.1); border: 1px solid rgba(31, 111, 235, 0.2); border-radius: 8px; padding: 1rem; display: flex; gap: 0.75rem;">
+<div style="color: #58a6ff; font-size: 1.1rem; flex-shrink: 0;">📄</div>
+<div>
+<h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.9rem; font-weight: 600;">Need Historical Data?</h4>
+<p style="color: #8b949e; margin: 0; font-size: 0.8rem; line-height: 1.4;">To save your data permanently and bypass this limit, use the <a href="https://github.com/ameyac11/github-traffic-automation" target="_blank" style="color: #58a6ff; text-decoration: none;">GitHub Traffic Automation Repository.</a> It runs a daily GitHub Action to save your data as CSVs, which you can upload in the CSV Upload mode.</p>
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""<div style="background: #0d1117; border: 1px solid #21262d; border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+<div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem;">
+<div style="background: #1f6feb; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0; font-size: 0.8rem;">i</div>
+<div>
+<h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 600;">Visualize Permanent Data</h4>
+<p style="color: #8b949e; margin: 0; font-size: 0.85rem; line-height: 1.4;">This mode allows you to upload the monthly CSV files generated by the GitHub Traffic Automation Repo.</p>
+</div>
+</div>
+<div style="background: rgba(46, 160, 67, 0.1); border: 1px solid rgba(46, 160, 67, 0.2); border-radius: 8px; padding: 1rem; display: flex; gap: 0.75rem;">
+<div style="color: #3fb950; font-size: 1.1rem; flex-shrink: 0;">💡</div>
+<div>
+<h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.9rem; font-weight: 600;">Why use CSVs?</h4>
+<p style="color: #8b949e; margin: 0; font-size: 0.8rem; line-height: 1.4;">GitHub only saves 14 days of traffic data. The automation repository pulls your data daily and saves it permanently as CSVs. By uploading those files here, you can visualize months or years of historical traffic! No PAT token is required.</p>
+</div>
+</div>
+</div>""", unsafe_allow_html=True)
+            
+        st.markdown("""<div style="margin-top: 1rem;">
+<h4 style="color: #e6edf3; margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 600;">Resources</h4>
+<div style="display: flex; gap: 0.75rem;">
+<a href="https://github.com/ameyac11/github-traffic-viewer" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
+<div style="display: flex; align-items: center; gap: 0.4rem;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+Dashboard Repo
+</div>
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+</a>
+<a href="https://github.com/ameyac11/github-traffic-automation" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
+<div style="display: flex; align-items: center; gap: 0.4rem;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+Automation Repo
+</div>
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+</a>
+</div>
+</div>""", unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div style="padding: 0 0 0.5rem 0; border-bottom: 1px solid #21262d; margin-bottom: 0.75rem;">
-        <h1 style="font-size:1.6rem;font-weight:800;color:#e6edf3;margin:0 0 0.2rem 0;letter-spacing:-0.02em;">
-            GitHub Traffic Dashboard
-        </h1>
-        <p style="font-size:0.85rem;color:#8b949e;margin:0;">
-            14-day analytics for all your repos — fully private (token cleared on refresh).
-            <a href="{GITHUB_REPO}" target="_blank" rel="noopener noreferrer"
-               style="color:#58a6ff;text-decoration:none;display:inline-flex;align-items:center;gap:0.35rem;vertical-align:middle;">
-               {GITHUB_LOGO}<span>View on GitHub</span></a>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("""<div style="text-align: center; margin-top: 2rem; color: #8b949e; font-size: 0.75rem;">
+Built for developers &nbsp;&nbsp;•&nbsp;&nbsp; Open source &nbsp;&nbsp;•&nbsp;&nbsp; Apache 2.0 license
+</div>""", unsafe_allow_html=True)
 
-    st.markdown("""
-    <div style="background:#161b22;border:1px solid #21262d;border-radius:12px;
-                padding:2rem 2.5rem;max-width:560px;margin:1rem 0;">
-        <h3 style="font-size:1rem;font-weight:700;color:#e6edf3;margin:0 0 0.75rem 0;">
-            👈 Get started in 2 steps
-        </h3>
-        <ol style="color:#8b949e;font-size:0.875rem;line-height:2.2;margin:0;padding-left:1.25rem;">
-            <li>Paste your <strong style="color:#c9d1d9">GitHub Personal Access Token</strong> in the sidebar</li>
-            <li>Click <strong style="color:#3fb950">Connect to GitHub</strong></li>
-        </ol>
-        <div style="margin-top: 1rem; padding: 0.75rem; background: #3d1214; border: 1px solid #6e3035; border-radius: 8px;">
-            <p style="font-size: 0.8rem; color: #ff7b72; margin: 0; line-height: 1.5;"><strong>⚠️ Security Notice:</strong> This app does not save your token. It is kept only in the session memory and is completely cleared upon refresh. If you are using a deployed web version of this dashboard, it is highly recommended to <strong>delete/revoke your token on GitHub</strong> after downloading your report.</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    with right_col:
+        st.markdown("<div class='landing-spacer'></div>", unsafe_allow_html=True)
+        
+        if st.session_state.authenticated:
+            # We are authenticated but data is not fetched yet -> Show the Avatar and Spinner here!
+            st.markdown(f"""
+            <div style="text-align:center; padding-top: 1rem; margin-bottom: 1.5rem;">
+                <img src="{st.session_state.avatar_url}" width="80" style="border-radius:50%;border:3px solid #30363d;margin-bottom:1rem;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <h2 style="color:#e6edf3;margin:0 0 0.25rem 0;">Welcome, {st.session_state.name}!</h2>
+                <p style="color:#8b949e;font-size:0.9rem;margin:0;">@{st.session_state.username}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            _fetch_traffic_data()
+            
+        else:
+            # We are not authenticated -> Show login or CSV form
+            if st.session_state.landing_mode == "Live API Fetch":
+                with st.container(border=True):
+                    st.markdown('<div class="landing-card"></div>', unsafe_allow_html=True)
+                    st.markdown("""<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+<h3 style="margin: 0; font-size: 1.05rem; color: #e6edf3; font-weight: 600;">Connect Your GitHub Account</h3>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+</div>
+<p style="color: #8b949e; font-size: 0.8rem; margin-top: 0; margin-bottom: 1rem;">Enter your Personal Access Token (PAT) to get started</p>""", unsafe_allow_html=True)
+                    
+                    token_input = st.text_input(
+                        "token",
+                        type="password",
+                        placeholder="🔑 Paste your PAT (ghp_...) here",
+                        label_visibility="collapsed",
+                        key="main_token_input"
+                    )
+                    
+                    if st.button("Connect to GitHub", use_container_width=True, type="primary"):
+                        if not token_input.strip():
+                            st.error("Please enter a token first.")
+                        else:
+                            with st.spinner("Connecting to GitHub..."):
+                                ok, uname, avatar, name = validate_token(token_input.strip())
+                                if ok:
+                                    st.session_state.update({
+                                        "authenticated": True,
+                                        "token":         token_input.strip(),
+                                        "username":      uname,
+                                        "name":          name or uname,
+                                        "avatar_url":    avatar,
+                                        "fetched":       False,
+                                        "df":            None,
+                                        "_is_fetching":  True,
+                                        "repo_filter":   "",
+                                    })
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Authentication failed: {uname}")
 
-    with st.expander("📖  How to create a Personal Access Token"):
-        st.markdown("""
-1. Go to **[GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)**
-2. Click **Generate new token (classic)**
-3. Give it a name like *Traffic Dashboard*
-4. Check the **`repo`** scope
-5. Generate and copy the token immediately
-6. Paste it in the sidebar and click **Connect to GitHub**
-""")
+                    st.markdown("""<div style="text-align: center; margin-top: 0.75rem; color: #8b949e; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>
+Your token is encrypted and never stored.
+</div>""", unsafe_allow_html=True)
+
+                with st.container(border=True):
+                    st.markdown('<div class="landing-card"></div>', unsafe_allow_html=True)
+                    st.markdown("""<h3 style="margin: 0 0 1rem 0; font-size: 1.05rem; color: #e6edf3; font-weight: 600;">Security & Help</h3>
+<div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: flex-start;">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 0.1rem;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>
+<div>
+<div style="color: #e6edf3; font-size: 0.85rem; font-weight: 500; margin-bottom: 0.1rem;">Security Notice</div>
+<div style="color: #8b949e; font-size: 0.75rem;">Token is only kept in session memory and cleared on refresh.</div>
+</div>
+</div>
+<hr style="border: 0; border-top: 1px solid #21262d; margin: 0.75rem 0;">
+<a href="https://github.com/settings/tokens" target="_blank" style="display: flex; justify-content: space-between; align-items: center; text-decoration: none; padding: 0.25rem 0;">
+<div style="display: flex; gap: 0.75rem; align-items: center;">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+<span style="color: #c9d1d9; font-size: 0.85rem; font-weight: 500;">How to create a PAT</span>
+</div>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+</a>
+<hr style="border: 0; border-top: 1px solid #21262d; margin: 0.75rem 0;">
+<a href="https://docs.github.com/en/rest" target="_blank" style="display: flex; justify-content: space-between; align-items: center; text-decoration: none; padding: 0.25rem 0;">
+<div style="display: flex; gap: 0.75rem; align-items: center;">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+<span style="color: #c9d1d9; font-size: 0.85rem; font-weight: 500;">Learn more about GitHub API</span>
+</div>
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+</a>""", unsafe_allow_html=True)
+                    
+                with st.container(border=True):
+                    st.markdown('<div class="landing-card"></div>', unsafe_allow_html=True)
+                    st.markdown("""<div style="display: flex; gap: 0.6rem; margin-bottom: 0.75rem; align-items: center;">
+<div style="color: #58a6ff;">💡</div>
+<h3 style="margin: 0; font-size: 0.95rem; color: #58a6ff; font-weight: 600;">Quick Tips</h3>
+</div>
+<div style="display: flex; gap: 0.6rem; margin-bottom: 0.5rem; align-items: flex-start;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 0.15rem; flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+<span style="color: #8b949e; font-size: 0.8rem;">Use a token with 'repo' scope for private repositories</span>
+</div>
+<div style="display: flex; gap: 0.6rem; align-items: flex-start;">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 0.15rem; flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+<span style="color: #8b949e; font-size: 0.8rem;">Token expires? Generate a new one in your settings</span>
+</div>""", unsafe_allow_html=True)
+
+            else:
+                with st.container(border=True):
+                    st.markdown('<div class="landing-card"></div>', unsafe_allow_html=True)
+                    st.markdown("""<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+<h3 style="margin: 0; font-size: 1.05rem; color: #e6edf3; font-weight: 600;">Upload Monthly CSV</h3>
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+</div>
+<p style="color: #8b949e; font-size: 0.8rem; margin-top: 0; margin-bottom: 1rem;">Select your local CSV file to load the dashboard.</p>""", unsafe_allow_html=True)
+                    
+                    uploaded_file = st.file_uploader("Upload CSV", type=["csv"], label_visibility="collapsed")
+                    
+                    if uploaded_file is not None:
+                        if st.button("Load Dashboard", type="primary", use_container_width=True):
+                            with st.spinner("Processing CSV data..."):
+                                try:
+                                    df = process_uploaded_csv(uploaded_file)
+                                    st.session_state.update({
+                                        "authenticated": True,
+                                        "token":         "csv_upload",
+                                        "username":      "local_data",
+                                        "name":          "CSV Upload",
+                                        "avatar_url":    "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                                        "fetched":       True,
+                                        "df":            df,
+                                        "_is_fetching":  False,
+                                        "repo_filter":   "",
+                                    })
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error processing CSV: {e}")
+                                    
+                    st.markdown("""<div style="text-align: center; margin-top: 1rem; color: #8b949e; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>
+CSV processed locally. No data is stored or uploaded.
+</div>""", unsafe_allow_html=True)
+
+
+
     st.stop()
 
 
-# ── Fetch first — minimal sidebar so no duplicate ghost widgets ───────────────
+# ── Fetch first — no sidebar so we can show user avatar in center ──────────────
 if not st.session_state.fetched or st.session_state.df is None:
-    _render_sidebar("fetching")
-    _fetch_traffic_data()
+    _, center_col, _ = st.columns([1, 1.5, 1])
+    with center_col:
+        st.markdown(f"""
+        <div style="text-align:center; padding-top: 1.5rem; margin-bottom: 1.5rem;">
+            <img src="{st.session_state.avatar_url}" width="80" style="border-radius:50%;border:3px solid #30363d;margin-bottom:1rem;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+            <h2 style="color:#e6edf3;margin:0 0 0.25rem 0;">Welcome, {st.session_state.name}!</h2>
+            <p style="color:#8b949e;font-size:0.9rem;margin:0;">@{st.session_state.username}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        _fetch_traffic_data()
+    st.stop()
 
 
 # ── Full dashboard after data is loaded ───────────────────────────────────────
-_render_sidebar("connected")
+st.markdown("<style>[data-testid='stSidebar'] {display: none !important;} [data-testid='collapsedControl'] {display: none !important;}</style>", unsafe_allow_html=True)
+
 _render_dashboard_hero()
 
 df = st.session_state.df
