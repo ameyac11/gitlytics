@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🚀 GitHub Traffic Dashboard 📊
+# 🚀 GitHub Traffic Monitor 📊
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![PyPI](https://img.shields.io/pypi/v/github-traffic-monitor)](https://pypi.org/project/github-traffic-monitor/)
+[![PyPI](https://img.shields.io/pypi/v/github-traffic-monitor?color=blue)](https://pypi.org/project/github-traffic-monitor/)
 [![Streamlit](https://img.shields.io/badge/Built%20with-Streamlit-ff4b4b)](https://streamlit.io/)
 [![Automation](https://img.shields.io/badge/Automation-Companion%20App-green?logo=github-actions)](https://github.com/ameyac11/github-traffic-monitor-automation)
 
