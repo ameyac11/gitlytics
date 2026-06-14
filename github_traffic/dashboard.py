@@ -693,7 +693,10 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
     st.markdown(metrics_html, unsafe_allow_html=True)
 
     active_df = active_df.copy()
-    active_df["_short"] = active_df["Repository"].str.split("/").str[1]
+    active_df["_short"] = active_df["Repository"].str.split("/").str[-1]
+    # Make _short unique by using full name for duplicates to prevent st.bar_chart crash
+    dups = active_df.duplicated(subset=["_short"], keep=False)
+    active_df.loc[dups, "_short"] = active_df.loc[dups, "Repository"]
 
     col1, col2 = st.columns(2)
     with col1:
