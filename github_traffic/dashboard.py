@@ -19,7 +19,7 @@ from github_traffic.core import (
 )
 from github_traffic.process import process_uploaded_csv
 
-GITHUB_REPO = "https://github.com/ameyac11/github-traffic-viewer"
+GITHUB_REPO = "https://github.com/ameyac11/github-traffic-monitor"
 GITHUB_LOGO = """
 <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="display:block;flex-shrink:0;">
     <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.1 0 0 .67-.21 2.2.82a7.68 7.68 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.09.16 1.9.08 2.1.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path>
@@ -55,8 +55,11 @@ html, body, [class*="css"], .stApp {
     color: #c9d1d9;
 }
 
-/* Hide Streamlit deploy button and branding — removed for debugging */
-
+/* Hide Streamlit deploy button and branding */
+header[data-testid="stHeader"] { display: none !important; }
+div[data-testid="stToolbar"] { display: none !important; }
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
 /* Sidebar background */
 
 section[data-testid="stSidebar"] {
@@ -656,9 +659,55 @@ def _search_filter_frame(frame: pd.DataFrame, query: str) -> pd.DataFrame:
     return frame[mask].copy()
 
 
+def _prepare_ranked_chart_frame(frame: pd.DataFrame, value_column: str, top_n: int) -> pd.DataFrame:
+    chart_frame = frame.copy()
+    chart_frame[value_column] = pd.to_numeric(chart_frame[value_column], errors="coerce")
+    chart_frame[value_column] = chart_frame[value_column].replace([float("inf"), float("-inf")], 0).fillna(0)
+    chart_frame = chart_frame.nlargest(top_n, value_column)
+    return chart_frame
+
+
+def _prepare_daily_chart_frame(entries: list[dict], value_labels: dict[str, str]) -> pd.DataFrame | None:
+    if not entries:
+        return None
+
+    chart_frame = pd.DataFrame(entries)
+    if chart_frame.empty or "timestamp" not in chart_frame.columns:
+        return None
+
+    chart_frame = chart_frame.copy()
+    chart_frame["timestamp"] = pd.to_datetime(chart_frame["timestamp"], errors="coerce", utc=True)
+    chart_frame = chart_frame.dropna(subset=["timestamp"])
+    if chart_frame.empty:
+        return None
+
+    for column, label in value_labels.items():
+        if column not in chart_frame.columns:
+            chart_frame[column] = 0
+        chart_frame[column] = pd.to_numeric(chart_frame[column], errors="coerce").replace([float("inf"), float("-inf")], 0).fillna(0)
+
+    chart_frame["date"] = chart_frame["timestamp"].dt.strftime("%Y-%m-%d")
+    chart_frame = chart_frame.groupby("date", as_index=True)[list(value_labels.keys())].sum()
+    chart_frame = chart_frame.rename(columns=value_labels)
+    return chart_frame if not chart_frame.empty else None
+
+
 def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None:
     """Render metrics, charts, tables, and repo detail for the current filter."""
     active_df = _search_filter_frame(df, search)
+    numeric_cols = [
+        "Stars",
+        "Forks",
+        "Total Views",
+        "Unique Visitors",
+        "Total Clones",
+        "Unique Cloners",
+        "Top Referrer Views",
+        "Top Path Views",
+    ]
+    for column in numeric_cols:
+        if column in active_df.columns:
+            active_df[column] = pd.to_numeric(active_df[column], errors="coerce").replace([float("inf"), float("-inf")], 0).fillna(0)
 
     st.markdown("<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8b949e;margin:0.5rem 0 0.5rem 0;'>Overview — Last 14 Days</p>", unsafe_allow_html=True)
 
@@ -693,6 +742,8 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
     st.markdown(metrics_html, unsafe_allow_html=True)
 
     active_df = active_df.copy()
+    # Drop duplicates to prevent st.bar_chart from crashing the frontend (blank screen) if API returns duplicate rows
+    active_df = active_df.drop_duplicates(subset=["Repository"])
     active_df["_short"] = active_df["Repository"].str.split("/").str[-1]
     # Make _short unique by using full name for duplicates to prevent st.bar_chart crash
     dups = active_df.duplicated(subset=["_short"], keep=False)
@@ -702,25 +753,25 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
     with col1:
         with st.container(border=True):
             st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>👁️ Top Repositories by Views</h4>", unsafe_allow_html=True)
-            top_v = active_df.nlargest(top_n, "Total Views").set_index("_short")[["Total Views", "Unique Visitors"]]
+            top_v = _prepare_ranked_chart_frame(active_df, "Total Views", top_n).set_index("_short")[["Total Views", "Unique Visitors"]]
             st.bar_chart(top_v, color=["#58a6ff", "#3fb950"])
 
     with col2:
         with st.container(border=True):
             st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>📥 Top Repositories by Clones</h4>", unsafe_allow_html=True)
-            top_c = active_df.nlargest(top_n, "Total Clones").set_index("_short")[["Total Clones", "Unique Cloners"]]
+            top_c = _prepare_ranked_chart_frame(active_df, "Total Clones", top_n).set_index("_short")[["Total Clones", "Unique Cloners"]]
             st.bar_chart(top_c, color=["#ff7b72", "#e3b341"])
 
     col3, col4 = st.columns(2)
     with col3:
         with st.container(border=True):
             st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>⭐ Most Starred</h4>", unsafe_allow_html=True)
-            st.bar_chart(active_df.nlargest(top_n, "Stars").set_index("_short")[["Stars"]], color=["#e3b341"])
+            st.bar_chart(_prepare_ranked_chart_frame(active_df, "Stars", top_n).set_index("_short")[["Stars"]], color=["#e3b341"])
 
     with col4:
         with st.container(border=True):
             st.markdown("<h4 style='color:#e6edf3;margin:0 0 1rem 0;font-size:0.95rem;font-weight:600;'>🍴 Most Forked</h4>", unsafe_allow_html=True)
-            st.bar_chart(active_df.nlargest(top_n, "Forks").set_index("_short")[["Forks"]], color=["#a371f7"])
+            st.bar_chart(_prepare_ranked_chart_frame(active_df, "Forks", top_n).set_index("_short")[["Forks"]], color=["#a371f7"])
 
     st.markdown("<p style='font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8b949e;margin:2rem 0 0.75rem 0;'>All Repositories</p>", unsafe_allow_html=True)
 
@@ -792,19 +843,17 @@ def _render_dashboard_content(df: pd.DataFrame, search: str, top_n: int) -> None
 
                 if d_views:
                     with ch1:
-                        dv = pd.DataFrame(d_views)
-                        dv["date"] = pd.to_datetime(dv["timestamp"]).dt.date
-                        dv = dv.set_index("date")[["count", "uniques"]].rename(columns={"count": "Views", "uniques": "Unique"})
-                        st.markdown("<p style='font-size:0.78rem;font-weight:600;color:#8b949e;margin-bottom:4px;'>📅 Daily Views</p>", unsafe_allow_html=True)
-                        st.line_chart(dv, color=["#58a6ff", "#1f6feb"])
+                        dv = _prepare_daily_chart_frame(d_views, {"count": "Views", "uniques": "Unique"})
+                        if dv is not None:
+                                st.markdown("<p style='font-size:0.78rem;font-weight:600;color:#8b949e;margin-bottom:4px;'>📅 Daily Views</p>", unsafe_allow_html=True)
+                                st.line_chart(dv, color=["#58a6ff", "#1f6feb"])
 
                 if d_clones:
                     with ch2:
-                        dc = pd.DataFrame(d_clones)
-                        dc["date"] = pd.to_datetime(dc["timestamp"]).dt.date
-                        dc = dc.set_index("date")[["count", "uniques"]].rename(columns={"count": "Clones", "uniques": "Unique"})
-                        st.markdown("<p style='font-size:0.78rem;font-weight:600;color:#8b949e;margin-bottom:4px;'>📥 Daily Clones</p>", unsafe_allow_html=True)
-                        st.line_chart(dc, color=["#f78166", "#ff7b72"])
+                        dc = _prepare_daily_chart_frame(d_clones, {"count": "Clones", "uniques": "Unique"})
+                        if dc is not None:
+                                st.markdown("<p style='font-size:0.78rem;font-weight:600;color:#8b949e;margin-bottom:4px;'>📥 Daily Clones</p>", unsafe_allow_html=True)
+                                st.line_chart(dc, color=["#f78166", "#ff7b72"])
 
             refs  = row.get("_referrers", [])
             paths = row.get("_paths",     [])
@@ -870,7 +919,7 @@ if not st.session_state.fetched or st.session_state.df is None:
 <p style="margin: 0; color: #8b949e; font-size: 0.85rem;">Monitor your repository traffic with real-time insights</p>
 </div>
 </div>
-<a href="https://github.com/ameyac11/github-traffic-viewer" target="_blank" style="padding: 0.4rem 0.8rem; border: 1px solid #21262d; border-radius: 8px; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; background: #161b22; font-size: 0.8rem; font-weight: 600;">
+<a href="https://github.com/ameyac11/github-traffic-monitor" target="_blank" style="padding: 0.4rem 0.8rem; border: 1px solid #21262d; border-radius: 8px; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; background: #161b22; font-size: 0.8rem; font-weight: 600;">
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
 Docs
 </a>
@@ -909,7 +958,7 @@ Docs
 <div style="color: #58a6ff; font-size: 1.1rem; flex-shrink: 0;">📄</div>
 <div>
 <h4 style="color: #e6edf3; margin: 0 0 0.25rem 0; font-size: 0.9rem; font-weight: 600;">Need Historical Data?</h4>
-<p style="color: #8b949e; margin: 0; font-size: 0.8rem; line-height: 1.4;">To save your data permanently and bypass this limit, use the <a href="https://github.com/ameyac11/github-traffic-automation" target="_blank" style="color: #58a6ff; text-decoration: none;">GitHub Traffic Automation Repository.</a> It runs a daily GitHub Action to save your data as CSVs, which you can upload in the CSV Upload mode.</p>
+<p style="color: #8b949e; margin: 0; font-size: 0.8rem; line-height: 1.4;">To save your data permanently and bypass this limit, use the <a href="https://github.com/ameyac11/github-traffic-monitor-automation" target="_blank" style="color: #58a6ff; text-decoration: none;">GitHub Traffic Automation Repository.</a> It runs a daily GitHub Action to save your data as CSVs, which you can upload in the CSV Upload mode.</p>
 </div>
 </div>
 </div>""", unsafe_allow_html=True)
@@ -934,14 +983,14 @@ Docs
         st.markdown("""<div style="margin-top: 1rem;">
 <h4 style="color: #e6edf3; margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 600;">Resources</h4>
 <div style="display: flex; gap: 0.75rem;">
-<a href="https://github.com/ameyac11/github-traffic-viewer" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
+<a href="https://github.com/ameyac11/github-traffic-monitor" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
 <div style="display: flex; align-items: center; gap: 0.4rem;">
 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
 Dashboard Repo
 </div>
 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
 </a>
-<a href="https://github.com/ameyac11/github-traffic-automation" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
+<a href="https://github.com/ameyac11/github-traffic-monitor-automation" target="_blank" style="flex: 1; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 0.6rem 0.75rem; color: #c9d1d9; text-decoration: none; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; font-weight: 500;">
 <div style="display: flex; align-items: center; gap: 0.4rem;">
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 Automation Repo
