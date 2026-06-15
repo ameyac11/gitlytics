@@ -8,7 +8,7 @@
 [![PyPI](https://img.shields.io/pypi/v/gitlytics?color=blue)](https://pypi.org/project/gitlytics/)
 [![React](https://img.shields.io/badge/UI-React-61dafb?logo=react)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Automation](https://img.shields.io/badge/Data%20Backup-Automation%20Tool-purple?logo=github-actions)](https://github.com/ameyac11/github-traffic-monitor-automation)
+[![Automation](https://img.shields.io/badge/Data%20Backup-Automation%20Tool-purple?logo=github-actions)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
 
 **Beautiful GitHub traffic analytics for all your repositories — public and private.** 📈
 
@@ -41,7 +41,7 @@ View 14-day views, clones, referrers, and popular paths for **all** your reposit
 
 **Don't lose your data!** We built a companion automation tool that runs silently in the background every 13 days using GitHub Actions to fetch and save your data permanently. 
 
-👉 **[Set up GitHub Traffic Automation here](https://github.com/ameyac11/github-traffic-monitor-automation)** (It takes literally 2 minutes to set up!)
+👉 **[Set up GitHub Traffic Automation here](https://github.com/ameyac11/gitlytics-github-traffic-automation)** (It takes literally 2 minutes to set up!)
 
 Once you have your automated data saved, you can seamlessly plug it right into this dashboard to visualize your beautiful, long-term historical charts.
 
