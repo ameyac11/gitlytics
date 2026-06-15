@@ -99,7 +99,7 @@ def main():
             from github_traffic.api import app
         except ImportError:
             print("  ❌ Dashboard dependencies not installed.")
-            print("     Install them with: pip install \"github-traffic-monitor[dashboard]\"")
+            print("     Install them with: pip install \"gitlytics[dashboard]\"")
             sys.exit(1)
             
         uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")

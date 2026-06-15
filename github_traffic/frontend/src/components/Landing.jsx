@@ -92,8 +92,9 @@ export default function Landing({ onApiAuthenticated, onCsvLoaded }) {
         )}
       </div>
       
-      <div style={{ marginTop: '40px', display: 'flex', gap: '24px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Code size={14}/> github-traffic-monitor</span>
+      <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', gap: '24px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Code size={14}/> gitlytics</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>v0.1.1</span>
       </div>
     </div>
   );
