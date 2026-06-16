@@ -33,7 +33,7 @@ jobs:
           node-version: 20
 
       - name: Build React Frontend
-        working-directory: ./github_traffic/frontend
+        working-directory: ./frontend
         run: |
           npm ci
           npm run build
