@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.3] - 2026-06-17
+### Fixed
+- Bumped version to 0.1.3 to resolve PyPI upload conflict (version 0.1.2 was already taken).
+
 ## [0.1.2] - 2026-06-16
 ### Fixed
 - Traffic data now always returns exactly 14 days, even when GitHub omits dates with zero views.
