@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, Github, Loader2, AlertCircle, ExternalLink, FileSpreadsheet, BookOpen, Home } from "lucide-react";
+import { LogOut, Loader2, AlertCircle, ExternalLink, FileSpreadsheet, BookOpen, Home } from "lucide-react";
 import {
   fetchTraffic,
   downloadCsv,
@@ -82,11 +82,9 @@ export function DashboardView({
       <header className="glass sticky top-0 z-10 border-b border-border">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-primary/30">
-              <Github className="h-5 w-5 text-primary" />
-            </div>
+            <img src="/logo.png" alt="Gitlytics Logo" className="h-12 w-auto object-contain drop-shadow-sm" />
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Gitlytics</p>
+              <p className="text-sm font-semibold"><span className="text-[#F05032]">Git</span>lytics</p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                 <a
                   href={MAIN_REPO_URL}

@@ -103,10 +103,8 @@ export function LoginView({
       </div>
       <div className="w-full max-w-md">
         <div className="mb-5 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 ring-1 ring-primary/30">
-            <Github className="h-7 w-7 text-primary" />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Gitlytics</h1>
+          <img src="/logo.png" alt="Gitlytics Logo" className="-mb-2 h-40 w-auto object-contain drop-shadow-sm" />
+          <h1 className="text-2xl font-semibold tracking-tight"><span className="text-[#F05032]">Git</span>lytics</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Track views, clones and visitors across all your repositories.
           </p>

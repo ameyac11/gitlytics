@@ -1,6 +1,8 @@
 <div align="center">
 
-# 📊 Gitlytics
+<img src="./assets/logo.png" alt="Gitlytics Logo" width="150" />
+
+# <span style="color: #F05032">Git</span>lytics
 ### GitHub Traffic Analytics & Automation 
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -66,7 +68,7 @@ Please consider giving this project a ⭐ if you find it helpful!
 
 The full Gitlytics ecosystem spans across a few repositories. If you are looking for the live web dashboard or the automation cron job, check out the links below:
 
-- 🌐 **[Gitlytics Web Ecosystem](https://github.com/ameyac11/gitlytics-deployement)**: The production homepage, React Dashboard, and VitePress documentation site.
+- **[<span style="color: #F05032">Git</span>lytics Web Ecosystem](https://github.com/ameyac11/gitlytics-deployement)**: The production homepage, React Dashboard, and VitePress documentation site.
 - ⚙️ **[Gitlytics Automation](https://github.com/ameyac11/gitlytics-github-traffic-automation)**: The GitHub Action companion tool that automates fetching and saving to defeat GitHub's 14-day traffic limit.
 
 ---

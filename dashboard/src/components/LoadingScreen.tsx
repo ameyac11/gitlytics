@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, Github, ExternalLink } from "lucide-react";
+import { Github, ExternalLink } from "lucide-react";
 import { MAIN_REPO_URL, AUTOMATION_REPO_URL } from "@/lib/github-api";
 
 export function LoadingScreen({ label = "Connecting…", durationMs = 3000 }: { label?: string; durationMs?: number }) {
@@ -30,9 +30,7 @@ export function LoadingScreen({ label = "Connecting…", durationMs = 3000 }: { 
   return (
     <div className="fixed inset-0 z-50 flex h-screen w-screen flex-col items-center justify-center bg-background px-6">
       <div className="flex w-full max-w-sm flex-col items-center text-center">
-        <div className="mb-6 flex h-14 w-14 animate-pulse items-center justify-center rounded-2xl bg-primary/15 ring-1 ring-primary/30">
-          <BarChart3 className="h-7 w-7 text-primary" />
-        </div>
+        <img src="/logo.png" alt="Gitlytics Logo" className="mb-8 h-20 w-auto animate-pulse object-contain drop-shadow-sm" />
         <p className="text-base font-semibold tracking-tight">{label}</p>
         <p className="mt-1 text-sm text-muted-foreground">Crunching your repository traffic…</p>
 
