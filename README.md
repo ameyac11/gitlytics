@@ -2,7 +2,7 @@
 
 <img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/logo.png" alt="Gitlytics Logo" width="150" />
 
-# <span style="color: #F05032">Git</span>lytics
+# Gitlytics
 ### GitHub Traffic Analytics & Automation 
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -14,6 +14,8 @@
 [![Homepage](https://img.shields.io/badge/Homepage-gitlytics.dev-success)](https://gitlytics.dev)
 [![Live](https://img.shields.io/badge/Live%20Demo-dashboard.gitlytics.dev-success)](https://dashboard.gitlytics.dev)
 [![Docs](https://img.shields.io/badge/Docs-docs.gitlytics.dev-success)](https://docs.gitlytics.dev)
+
+<br/>Please consider giving this project a ⭐ if you find it helpful! <br/>
 
 **Beautiful GitHub traffic analytics for all your repositories — public and private.** <br/> Track views, clones, referrers, and popular paths indefinitely.
 
@@ -28,18 +30,12 @@
 > 
 > 📚 **[Read the Full API Documentation](https://docs.gitlytics.dev)**
 
-Please consider giving this project a ⭐ if you find it helpful!
-
 </div>
 
 ---
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/gitlytics_thumbnail_1.png" width="49%" />
-  <img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/gitlytics_thumbnail_2.png" width="49%" />
-</div>
-<div align="center">
-  <img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/gitlytics_thumbnail_3.png" width="98.5%" />
+  <img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/gitlytics_thumbnail_1.png" width="100%" />
 </div>
 
 ---
@@ -68,7 +64,7 @@ Please consider giving this project a ⭐ if you find it helpful!
 
 The full Gitlytics ecosystem spans across a few repositories. If you are looking for the live web dashboard or the automation cron job, check out the links below:
 
-- **[<span style="color: #F05032">Git</span>lytics Web Ecosystem](https://github.com/ameyac11/gitlytics-deployement)**: The production homepage, React Dashboard, and VitePress documentation site.
+- **[Gitlytics Web Ecosystem](https://github.com/ameyac11/gitlytics-deployement)**: The production landing page, React Dashboard, and React Documentation site.
 - ⚙️ **[Gitlytics Automation](https://github.com/ameyac11/gitlytics-github-traffic-automation)**: The GitHub Action companion tool that automates fetching and saving to defeat GitHub's 14-day traffic limit.
 
 ---
@@ -114,6 +110,9 @@ Gitlytics is powered by 3 massive command-line tools. You can run them anywhere 
 Fetch your live 14-day traffic and print a beautiful ASCII table directly in your console.
 ```bash
 gitlytics fetch --token ghp_your_token_here --print-table
+
+# Fetch specific metrics only (e.g., views and clones)
+gitlytics fetch --token ghp_your_token_here --print-table --metrics views clones
 ```
 
 ### 2️⃣ `gitlytics sync` (Background Database Cron)
@@ -121,6 +120,9 @@ Tired of losing data? Use `sync` to permanently append today's traffic to a CSV 
 ```bash
 # Sync once
 gitlytics sync --token ghp_your_token --data-dir ./data
+
+# Sync specific metrics only
+gitlytics sync --token ghp_your_token --data-dir ./data --metrics views clones
 
 # Run permanently in the background as a cron job (runs at 11:00 PM every day)
 gitlytics sync --token ghp_your_token --data-dir ./data --schedule-cron "0 23 * * *"
@@ -179,6 +181,7 @@ gitlytics.fetch_traffic(
 | `print_table` | `bool` | `False` | If `True`, formats and prints a detailed ASCII traffic table to the console. |
 | `return_format` | `str` | `"dataframe"` | The format of returned data: `"dataframe"` (Pandas DataFrame), `"timeseries"` (chart-ready nested dict), or `"summary"` (per-repo totals dict). |
 | `save_file` | `str` | `None` | Optional. File path where the fetched data will be saved (CSV or JSON). |
+| `metrics` | `list` | `None` | Optional. List of metrics to fetch (e.g., `["views", "clones"]`). |
 
 ---
 
@@ -215,6 +218,7 @@ gitlytics.sync(
 | `schedule_cron` | `str` | `None` | Optional cron expression (e.g., `"*/15 * * * *"`). If set, runs an infinite scheduler loop. |
 | `export_json` | `str` | `None` | Optional. Path to compile and export a consolidated history JSON for the frontend. |
 | `export_public_only` | `bool` | `True` | Security firewall: if `True`, strips private repository data from the compiled `export_json`. |
+| `metrics` | `list` | `None` | Optional. List of metrics to sync (e.g., `["views", "clones"]`). |
 
 ---
 
@@ -246,16 +250,33 @@ gitlytics.serve_dashboard(
 
 ## 📊 CSV Output Columns
 
-When you sync data, the local CSV databases track 13 detailed metrics:
+When you sync data, the local CSV databases track 23 detailed metrics by default. If you customize the metrics using the `--metrics` CLI flag or `metrics` Python parameter, the CSV columns will dynamically include only the columns corresponding to your selection (along with the default `date`, `repository`, and `is_private` identification columns).
 
-| Column | Description | Column | Description |
-|---|---|---|---|
-| `repository` | Full repo name (`user/repo`) | `stars` | Current star count |
-| `is_private` | `True` / `False` | `forks` | Current fork count |
-| `views` | Page views today | `unique_visitors` | Unique visitors today |
-| `clones` | Clone count today | `unique_cloners` | Unique cloners today |
-| `top_referrer` | Highest-traffic referral source | `top_referrer_views` | Views from top referrer |
-| `top_path` | Most visited path | `top_path_views` | Views for top path |
+| Column | Type | Description |
+|---|---|---|
+| `date` | `str` | ISO date (`YYYY-MM-DD`) for this day's traffic snapshot. |
+| `repository` | `str` | Full GitHub repository name (`owner/repo`). |
+| `is_private` | `bool` | `True` if repository is private, `False` otherwise. |
+| `views` | `int` | Total page views on this day. |
+| `unique_visitors` | `int` | Unique visitors on this day. |
+| `clones` | `int` | Total git clone operations on this day. |
+| `unique_cloners` | `int` | Unique clone clients on this day. |
+| `stars` | `int` | Current total star count snapshot. |
+| `forks` | `int` | Current total fork count snapshot. |
+| `language` | `str` | Primary programming language of the repository. |
+| `topics` | `str` | JSON array containing repository tags/topics. |
+| `watchers_count` | `int` | Total watchers of the repository. |
+| `pushed_at` | `str` | Last push ISO timestamp. |
+| `created_at` | `str` | Repository creation ISO timestamp. |
+| `open_issues_count` | `int` | Total number of open issues. |
+| `top_referrer` | `str` | Top external traffic referral source (14-day rolling window). |
+| `top_referrer_views` | `int` | Views sent by the top referrer. |
+| `top_referrer_uniques` | `int` | Uniques sent by the top referrer. |
+| `_raw_referrers` | `str` | Raw JSON array of all referral sources. |
+| `top_path` | `str` | Most visited repository file path (14-day rolling window). |
+| `top_path_views` | `int` | Views for the top path. |
+| `top_path_uniques` | `int` | Uniques for the top path. |
+| `_raw_paths` | `str` | Raw JSON array of all popular paths. |
 
 ---
 

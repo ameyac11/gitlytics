@@ -35,6 +35,7 @@ def main():
         help="Data shape to return.",
     )
     fetch_parser.add_argument("--save-file", help="Path to save the output (.csv or .json).")
+    fetch_parser.add_argument("-m", "--metrics", nargs="+", help="Specific metrics to fetch (e.g. views clones).")
 
     # ── SYNC subcommand ───────────────────────────────────────────────────────
     sync_parser = subparsers.add_parser("sync", help="Append traffic data to a local CSV database.")
@@ -60,6 +61,7 @@ def main():
             "By default they are stripped for security."
         ),
     )
+    sync_parser.add_argument("-m", "--metrics", nargs="+", help="Specific metrics to sync (e.g. views clones).")
 
     # ── DASHBOARD subcommand ──────────────────────────────────────────────────
     dash_parser = subparsers.add_parser("dashboard", help="Serve the local React dashboard.")
@@ -90,7 +92,8 @@ def main():
             repo_name=repos,
             print_table=args.print_table,
             return_format=args.return_format,
-            save_file=args.save_file
+            save_file=args.save_file,
+            metrics=args.metrics
         )
         # Give the user a hint if they didn't ask for any output
         if not args.print_table and not args.save_file:
@@ -105,11 +108,12 @@ def main():
             output_mode=args.output_mode,
             schedule_cron=args.schedule_cron,
             export_json=args.export_json,
-            export_public_only=args.export_public_only
+            export_public_only=args.export_public_only,
+            metrics=args.metrics
         )
 
     elif args.command == "dashboard":
-        print(f"\n🚀 Starting Gitlytics Dashboard on http://{args.host}:{args.port}\n")
+        print(f"\n[Gitlytics] Starting Gitlytics Dashboard on http://{args.host}:{args.port}\n")
         serve_dashboard(
             host=args.host,
             port=args.port,

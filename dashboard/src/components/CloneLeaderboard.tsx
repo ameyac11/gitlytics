@@ -1,9 +1,12 @@
 import { Download, ExternalLink, Lock, Trophy } from "lucide-react";
 import type { RepoTraffic } from "@/lib/github-api";
+import { isTrending, isNewThisWeek } from "@/lib/analytics";
+import { TrendingPill, NewPill } from "./StatusPills";
+import { LanguagePill } from "./LanguagePill";
 
 export function CloneLeaderboard({ repos }: { repos: RepoTraffic[] }) {
   const ranked = [...repos]
-    .sort((a, b) => (Number(b.clones) || 0) - (Number(a.clones) || 0))
+    .sort((a, b) => (Number(b["clones"]) || 0) - (Number(a["clones"]) || 0))
     .slice(0, 10);
 
   return (
@@ -26,7 +29,6 @@ export function CloneLeaderboard({ repos }: { repos: RepoTraffic[] }) {
               <th className="px-4 py-3 text-right font-medium">Unique Cloners</th>
               <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Views</th>
               <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Stars</th>
-              <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Forks</th>
             </tr>
           </thead>
           <tbody>
@@ -46,7 +48,7 @@ export function CloneLeaderboard({ repos }: { repos: RepoTraffic[] }) {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {r.is_private && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                     <a
                       href={`https://github.com/${r.repository}`}
@@ -57,28 +59,28 @@ export function CloneLeaderboard({ repos }: { repos: RepoTraffic[] }) {
                       {r.repository}
                       <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                     </a>
+                    <LanguagePill repo={r.repository} />
+                    {isTrending(r) && <TrendingPill />}
+                    {isNewThisWeek(r) && <NewPill />}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums text-primary">
-                  {r.clones.toLocaleString()}
+                  {r["clones"].toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                  {(Number(r.unique_cloners) || 0).toLocaleString()}
+                  {(Number(r["unique_cloners"]) || 0).toLocaleString()}
                 </td>
                 <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
-                  {r.views.toLocaleString()}
+                  {r["views"].toLocaleString()}
                 </td>
                 <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
                   {r.stars.toLocaleString()}
-                </td>
-                <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
-                  {r.forks.toLocaleString()}
                 </td>
               </tr>
             ))}
             {ranked.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   No clone data available.
                 </td>
               </tr>

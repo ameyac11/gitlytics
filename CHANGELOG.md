@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6] - 2026-06-20
+### Added
+- Added `-m` / `--metrics` filtering parameters to CLI commands (`fetch`, `sync`) and Python API functions to selectively fetch or sync specific metrics.
+- Implemented concurrent threading in the backend for faster deep API fetching of commits, pull requests, releases, and community profiles.
+- Added a backend endpoint to query public user profiles and repositories.
+- Added PNG, PDF, and Developer Card export features to download high-resolution dashboard snapshots, multi-page PDF reports, and shareable summary cards.
+- Integrated a global export state hook and CSS overrides to disable transitions and Recharts animations during exports, preventing incomplete or transparent visual elements.
+- Applied Apache-2.0 License with Commons Clause v1.0.
+
+### Changed
+- Improved the frontend dashboard UI/UX styling, metrics card layouts, and avatar ring aesthetics.
+- Optimized and corrected traffic date normalization logic in `process.py`.
 ## [0.1.5] - 2026-06-18
 ### Changed
 - Updated the primary project logo to a newer, higher-resolution version across the dashboard and README.

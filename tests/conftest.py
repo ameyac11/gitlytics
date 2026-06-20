@@ -11,11 +11,13 @@ Shared pytest configuration and fixtures for the gitlytics test suite.
    test_cli.py         unit tests for cli.py
    test_process.py     unit tests for process.py
    test_api.py         unit tests for api.py
+   test_username.py    unit tests for username-mode (get_public_user/repos + /api/username)
 
  ONLINE / LIVE tests  (scripts, real GitHub API, writes to data/)
    python tests/live_module.py       → Python public API
    python tests/live_cli.py          → CLI commands via subprocess
    python tests/live_automation.py   → sync engine / CSV writing
+   python tests/live_username.py     → username mode (no token needed)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 This conftest.py applies only to the offline pytest suite.

@@ -283,6 +283,7 @@ class TestProcessUploadedCsv:
         # Title-case columns from old export format should be normalised to lowercase
         csv_file = self._make_csv_bytes({
             "Repository": "user/repo",
+            "date": "2025-06-14",
             "Total Views": 10,
             "Unique Visitors": 4,
             "Total Clones": 3,
@@ -306,6 +307,7 @@ class TestProcessUploadedCsv:
         # The function must always return a pandas DataFrame
         csv_file = self._make_csv_bytes({
             "repository": "user/repo",
+            "date": "2025-06-14",
             "views": 5,
         })
         result = process_uploaded_csv(csv_file)
@@ -315,6 +317,7 @@ class TestProcessUploadedCsv:
         # After normalising column names, the actual data values must be unchanged
         csv_file = self._make_csv_bytes({
             "repository": "user/repo",
+            "date": "2025-06-14",
             "views": 42,
         })
         result = process_uploaded_csv(csv_file)

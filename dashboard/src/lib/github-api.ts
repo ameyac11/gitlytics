@@ -1,4 +1,8 @@
-export const API_BASE = "";
+// Copyright (c) 2024 Ameya Chopade. Licensed under Apache-2.0 with Commons Clause.
+// Commercial use and cloud deployment as a service are strictly prohibited.
+// See LICENSE.md for full terms.
+export const API_BASE = "http://localhost:8000";
+import { exportFilename, appendHistory } from "./export-history";
 
 export const MAIN_REPO_URL = "https://github.com/ameyac11/gitlytics";
 
@@ -42,11 +46,25 @@ export interface RepoTraffic {
   unique_cloners: number;
   top_referrer?: string;
   top_referrer_views?: number;
-  top_referrer_uniques?: number;
   top_path?: string;
   top_path_views?: number;
-  top_path_uniques?: number;
-  date?: string;
+  fetched_at?: string;
+  // Repo metadata — available in Live API and Username modes
+  language?: string | null;
+  topics?: string[];
+  watchers_count?: number;
+  open_issues_count?: number;
+  pushed_at?: string | null;
+  created_at?: string | null;
+  // Deep stats — only available for top 20 repos in Live API mode
+  total_commits?: number | null;
+  open_prs?: number | null;
+  total_releases?: number | null;
+  last_release_at?: string | null;
+  has_readme?: boolean | null;
+  has_license?: boolean | null;
+  has_contributing?: boolean | null;
+  has_code_of_conduct?: boolean | null;
   _daily_views?: DailyPoint[];
   _daily_clones?: DailyPoint[];
   _referrers?: ReferrerPoint[];
@@ -60,17 +78,8 @@ export async function authenticate(token: string): Promise<AuthResult> {
     body: JSON.stringify({ token }),
   });
   if (!res.ok) {
-    let errorDetail = `Authentication failed (${res.status}).`;
-    try {
-      const errorData = await res.json();
-      if (errorData.detail) {
-        errorDetail = errorData.detail;
-      }
-    } catch (e) {
-      // ignore json parse error
-    }
     throw new Error(
-      `${errorDetail} Check your token and that the backend is running.`,
+      `Authentication failed (${res.status}). Check your token and that the backend is running.`,
     );
   }
   const data = (await res.json()) as AuthResult;
@@ -103,58 +112,68 @@ export async function uploadCsv(file: File): Promise<RepoTraffic[]> {
   return (await res.json()) as RepoTraffic[];
 }
 
-export function downloadCsv(repos: RepoTraffic[], filename = "github-traffic.csv") {
-  const cols = [
-    "date", "repository", "is_private", "views", "unique_visitors", "clones", "unique_cloners",
-    "stars", "forks", "top_referrer", "top_referrer_views", "top_referrer_uniques",
-    "top_path", "top_path_views", "top_path_uniques"
-  ];
+/**
+ * Fixed canonical CSV schema. Every export uses exactly these columns.
+ */
+const CSV_COLUMNS = [
+  "date",
+  "repository",
+  "is_private",
+  "views",
+  "unique_visitors",
+  "clones",
+  "unique_cloners",
+  "stars",
+  "forks",
+  "top_referrer",
+  "top_referrer_views",
+  "top_referrer_uniques",
+  "top_path",
+  "top_path_views",
+  "top_path_uniques",
+  "_raw_referrers",
+  "_raw_paths",
+] as const;
+
+function csvDate(r: RepoTraffic): string {
+  if (r["fetched_at"]) return String(r["fetched_at"]).slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
+}
+
+export async function downloadCsv(
+  repos: RepoTraffic[],
+  repoLabel = "All repos",
+) {
+  const filename = exportFilename("csv");
   const escape = (v: unknown) => {
     const s = v === undefined || v === null ? "" : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = cols.join(",");
-  const rows: string[] = [];
-
-  repos.forEach((r) => {
-    const dailyMap = new Map<string, { views: number, unique_visitors: number, clones: number, unique_cloners: number }>();
-
-    (r._daily_views || []).forEach(v => {
-      const d = v.timestamp.substring(0, 10);
-      if (!dailyMap.has(d)) dailyMap.set(d, { views: 0, unique_visitors: 0, clones: 0, unique_cloners: 0 });
-      const entry = dailyMap.get(d)!;
-      entry.views += v.count;
-      entry.unique_visitors += v.uniques;
-    });
-
-    (r._daily_clones || []).forEach(c => {
-      const d = c.timestamp.substring(0, 10);
-      if (!dailyMap.has(d)) dailyMap.set(d, { views: 0, unique_visitors: 0, clones: 0, unique_cloners: 0 });
-      const entry = dailyMap.get(d)!;
-      entry.clones += c.count;
-      entry.unique_cloners += c.uniques;
-    });
-
-    if (dailyMap.size === 0) {
-      const dDate = r.date ? r.date.substring(0, 10) : new Date().toISOString().substring(0, 10);
-      dailyMap.set(dDate, { views: 0, unique_visitors: 0, clones: 0, unique_cloners: 0 });
-    }
-
-    const sortedDates = Array.from(dailyMap.keys()).sort();
-
-    sortedDates.forEach(date => {
-      const daily = dailyMap.get(date)!;
-      const rowData = [
-        date, r.repository, r.is_private,
-        daily.views, daily.unique_visitors, daily.clones, daily.unique_cloners,
-        r.stars, r.forks,
-        r.top_referrer, r.top_referrer_views, r.top_referrer_uniques,
-        r.top_path, r.top_path_views, r.top_path_uniques
-      ];
-      rows.push(rowData.map(escape).join(","));
-    });
+  const header = CSV_COLUMNS.join(",");
+  const rows = repos.map((r) => {
+    const topRef = r._referrers?.[0];
+    const topPath = r._paths?.[0];
+    const map: Record<(typeof CSV_COLUMNS)[number], unknown> = {
+      date: csvDate(r),
+      repository: r.repository,
+      is_private: r.is_private ? "true" : "false",
+      views: r["views"] ?? "",
+      unique_visitors: r["unique_visitors"] ?? "",
+      clones: r["clones"] ?? "",
+      unique_cloners: r["unique_cloners"] ?? "",
+      stars: r.stars ?? "",
+      forks: r.forks ?? "",
+      top_referrer: r["top_referrer"] ?? topRef?.referrer ?? "",
+      top_referrer_views: r["top_referrer_views"] ?? topRef?.count ?? "",
+      top_referrer_uniques: topRef?.uniques ?? "",
+      top_path: r["top_path"] ?? topPath?.path ?? "",
+      top_path_views: r["top_path_views"] ?? topPath?.count ?? "",
+      top_path_uniques: topPath?.uniques ?? "",
+      _raw_referrers: r._referrers ? JSON.stringify(r._referrers) : "",
+      _raw_paths: r._paths ? JSON.stringify(r._paths) : "",
+    };
+    return CSV_COLUMNS.map((c) => escape(map[c])).join(",");
   });
-
   const csv = [header, ...rows].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -163,4 +182,5 @@ export function downloadCsv(repos: RepoTraffic[], filename = "github-traffic.csv
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+  appendHistory({ action: "Download CSV", repos: repoLabel, filename });
 }

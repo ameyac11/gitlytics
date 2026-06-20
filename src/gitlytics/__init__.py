@@ -8,7 +8,9 @@ import json
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.1.5"
+__version__ = "0.1.6"
+
+__all__ = ["fetch_traffic", "sync", "serve_dashboard", "__version__"]
 
 # Import the internal building blocks — users never call these directly
 from .core import fetch_traffic_data, print_repo_table
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_format: str = "dataframe", save_file: str = None):
+def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_format: str = "dataframe", save_file: str = None, metrics: list = None):
     """
     Fetches the last 14 days of traffic data for one or all repositories.
 
@@ -35,13 +37,14 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
             ``"summary"`` — returns a per-repo totals dict.
         save_file: Optional path to save the output. Extension determines
             format: ``.json`` writes JSON, anything else writes CSV.
+        metrics: Optional list of metrics to fetch (e.g., ``["views", "clones"]``).
 
     Returns:
         A ``pandas.DataFrame`` when ``return_format="dataframe"``, otherwise
         a ``dict`` matching the requested format.
     """
     # Hit the GitHub API and get back a tidy DataFrame (one row per day per repo)
-    df = fetch_traffic_data(token, repo_name)
+    df = fetch_traffic_data(token, repo_name, metrics)
 
     # Print the ASCII table to the console if the user asked for it
     if print_table:
@@ -79,7 +82,7 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
     return payload
 
 
-def sync(token: str, repo_name=None, data_dir: str = "./data", output_mode: str = "monthly", schedule_cron: str = None, export_json: str = None, export_public_only: bool = True):
+def sync(token: str, repo_name=None, data_dir: str = "./data", output_mode: str = "monthly", schedule_cron: str = None, export_json: str = None, export_public_only: bool = True, metrics: list = None):
     """
     Fetches data and appends it to a local CSV database, optionally running as a permanent background daemon.
 
@@ -93,6 +96,7 @@ def sync(token: str, repo_name=None, data_dir: str = "./data", output_mode: str 
         export_json: Path to export the merged historical database as a JSON file.
         export_public_only: If ``True`` (default), strips private repos from the
             exported JSON — acts as a security firewall.
+        metrics: Optional list of metrics to fetch (e.g., ``["views", "clones"]``).
     """
     # Hand off to the automation engine — it handles deduplication and schema migration
     run_sync(
@@ -102,7 +106,8 @@ def sync(token: str, repo_name=None, data_dir: str = "./data", output_mode: str 
         output_mode=output_mode,
         schedule_cron=schedule_cron,
         export_json=export_json,
-        export_public_only=export_public_only
+        export_public_only=export_public_only,
+        metrics=metrics
     )
 
 
@@ -130,11 +135,21 @@ def serve_dashboard(host: str = "127.0.0.1", port: int = 8000, token: str = None
             "Install them with: pip install \"gitlytics[dashboard]\""
         )
 
-    # Pass the token and data folder to the FastAPI app via environment variables
-    if token:
-        os.environ["GITLYTICS_TOKEN"] = token
-    if data_dir:
-        os.environ["GITLYTICS_DATA_DIR"] = os.path.abspath(data_dir)
-
-    # Start the web server — it won't return until the user presses Ctrl+C
-    uvicorn.run("gitlytics.api:app", host=host, port=port, reload=False)
+    # M-7: save original values so they are restored when the server stops
+    _orig_token = os.environ.get("GITLYTICS_TOKEN")
+    _orig_data_dir = os.environ.get("GITLYTICS_DATA_DIR")
+    try:
+        if token:
+            os.environ["GITLYTICS_TOKEN"] = token
+        if data_dir:
+            os.environ["GITLYTICS_DATA_DIR"] = os.path.abspath(data_dir)
+        uvicorn.run("gitlytics.api:app", host=host, port=port, reload=False)
+    finally:
+        if _orig_token is None:
+            os.environ.pop("GITLYTICS_TOKEN", None)
+        else:
+            os.environ["GITLYTICS_TOKEN"] = _orig_token
+        if _orig_data_dir is None:
+            os.environ.pop("GITLYTICS_DATA_DIR", None)
+        else:
+            os.environ["GITLYTICS_DATA_DIR"] = _orig_data_dir

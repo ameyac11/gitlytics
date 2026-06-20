@@ -204,16 +204,12 @@ if __name__ == "__main__":
             # Validate the JSON structure
             with open(json_export_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
-            assert "account_totals" in payload, "Missing 'account_totals' key"
-            assert "repositories" in payload, "Missing 'repositories' key"
-            ok(f"JSON has correct structure: {len(payload['repositories'])} repos")
-            totals = payload["account_totals"]
-            info(f"Account totals → views: {totals.get('total_views', 0)}, "
-                 f"stars: {totals.get('total_stars', 0)}")
+            assert isinstance(payload, list), "Payload should be a list"
+            ok(f"JSON has correct structure: {len(payload)} repos")
         else:
             warn("JSON export was not created (may be empty data)")
     except Exception as exc:
-        fail(f"export_json raised: {exc}")
+        import traceback; traceback.print_exc(); fail(f"export_json raised: {exc}")
 
     print("\n  [4b] export_json_database() directly")
     json_direct_path = DATA_DIR / "automation_direct_export.json"
@@ -328,3 +324,4 @@ if __name__ == "__main__":
     print(f"\n  All automation online tests completed.")
     print(f"  Check {RED}✗{RESET} lines above for any failures.")
     print(f"  Output files in: data/data_automation/\n")
+

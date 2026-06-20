@@ -148,16 +148,18 @@ class TestAuthEndpoint:
 
 class TestTrafficEndpoint:
     @patch("gitlytics.api.validate_token", return_value=(True, "user"))
+    @patch("gitlytics.api._validate_token_cached", return_value=(True, "user"))
     @patch("gitlytics.api.fetch_traffic_data", return_value=_make_tidy_df())
-    def test_valid_token_returns_list(self, mock_fetch, mock_validate):
+    def test_valid_token_returns_list(self, mock_fetch, mock_cached, mock_validate):
         # The traffic endpoint must return a list of repo objects
         response = client.post("/api/traffic", json={"token": "valid_token"})
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
     @patch("gitlytics.api.validate_token", return_value=(True, "user"))
+    @patch("gitlytics.api._validate_token_cached", return_value=(True, "user"))
     @patch("gitlytics.api.fetch_traffic_data", return_value=_make_tidy_df())
-    def test_repo_objects_have_required_fields(self, mock_fetch, mock_validate):
+    def test_repo_objects_have_required_fields(self, mock_fetch, mock_cached, mock_validate):
         # Each repo object must include the fields the React dashboard depends on
         response = client.post("/api/traffic", json={"token": "valid_token"})
         repos = response.json()
@@ -181,8 +183,9 @@ class TestTrafficEndpoint:
         assert response.status_code == 401
 
     @patch("gitlytics.api.validate_token", return_value=(True, "user"))
+    @patch("gitlytics.api._validate_token_cached", return_value=(True, "user"))
     @patch("gitlytics.api.fetch_traffic_data", return_value=pd.DataFrame())
-    def test_empty_data_returns_empty_list(self, mock_fetch, mock_validate):
+    def test_empty_data_returns_empty_list(self, mock_fetch, mock_cached, mock_validate):
         # If the user has no repos, the endpoint must return [] not crash
         response = client.post("/api/traffic", json={"token": "valid_token"})
         assert response.status_code == 200

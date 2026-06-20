@@ -5,6 +5,7 @@ Handles processing Tidy DataFrames into final JSON formats for the dashboard.
 import ast
 import json
 import logging
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -12,21 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", export_public_only: bool = True) -> dict:
-    """
-    Transforms the Tidy Data DataFrame into the nested JSON structure.
-    Uses .iloc[-1] for snapshot metrics like stars/forks to prevent inflation.
-    """
+    """Transforms the Tidy Data DataFrame into the nested JSON structure."""
     if df.empty:
         return {"account_totals": {}, "repositories": {}}
 
-    # Strip private repos from the export if the user wants public-only output
     if export_public_only and "is_private" in df.columns:
         df = df[~df["is_private"]]
 
     if df.empty:
         return {"account_totals": {}, "repositories": {}}
 
-    # Running totals across all repos for the account summary card
     account_views = 0
     account_clones = 0
     account_uniques = 0
@@ -37,25 +33,19 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
     repos_dict = {}
 
     for repo, group in df.groupby("repository"):
-        # Sort oldest to newest so timeseries arrays are in chronological order
         group = group.sort_values("date")
 
-        # Traffic is cumulative — sum it over the whole window
         r_views = int(group["views"].sum()) if "views" in group.columns else 0
         r_clones = int(group["clones"].sum()) if "clones" in group.columns else 0
         r_unique_v = int(group["unique_visitors"].sum()) if "unique_visitors" in group.columns else 0
         r_unique_c = int(group["unique_cloners"].sum()) if "unique_cloners" in group.columns else 0
-
-        # Stars and forks are snapshots — use the most recent row to avoid inflating totals
         r_stars = int(group["stars"].dropna().iloc[-1]) if "stars" in group.columns and not group["stars"].dropna().empty else 0
         r_forks = int(group["forks"].dropna().iloc[-1]) if "forks" in group.columns and not group["forks"].dropna().empty else 0
         r_is_private = bool(group["is_private"].dropna().iloc[-1]) if "is_private" in group.columns and not group["is_private"].dropna().empty else False
 
-        # Same for referrer and path — take the most recent snapshot
         top_ref = str(group["top_referrer"].dropna().iloc[-1]) if "top_referrer" in group.columns and not group["top_referrer"].dropna().empty else ""
         top_path = str(group["top_path"].dropna().iloc[-1]) if "top_path" in group.columns and not group["top_path"].dropna().empty else ""
 
-        # Add this repo's traffic to the account-wide running totals
         account_views += r_views
         account_clones += r_clones
         account_uniques += r_unique_v
@@ -64,7 +54,6 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
         account_forks += r_forks
 
         if return_format == "summary":
-            # Summary mode: just the totals, no per-day breakdown
             repos_dict[repo] = {
                 "is_private": r_is_private,
                 "total_views": r_views,
@@ -75,7 +64,6 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
                 "forks": r_forks
             }
         else:
-            # Timeseries mode: full day-by-day array the React charts can consume directly
             timeseries = []
             for _, row in group.iterrows():
                 timeseries.append({
@@ -97,7 +85,6 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
                 }
             }
 
-    # Package the account-wide summary alongside the per-repo data
     account_totals = {
         "total_views": account_views,
         "total_clones": account_clones,
@@ -114,28 +101,26 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
 
 
 def process_uploaded_csv(uploaded_file) -> pd.DataFrame:
-    """
-    Reads a user-uploaded CSV and normalises column names to match our tidy schema.
-    Supports both our native format and the old github-traffic-monitor column names.
-    """
+    """Reads a user-uploaded CSV and normalises column names to match our tidy schema."""
     raw_df = pd.read_csv(uploaded_file)
     if "repository" not in raw_df.columns:
         if "repo_name" in raw_df.columns:
-            # Old column name from the pre-rebranding days
             raw_df = raw_df.rename(columns={"repo_name": "repository"})
         elif "Repository" in raw_df.columns:
-            # Title-case column names from an older export format
             raw_df = raw_df.rename(columns={
                 "Repository": "repository", "Total Views": "views", "Unique Visitors": "unique_visitors",
                 "Total Clones": "clones", "Unique Cloners": "unique_cloners", "Stars": "stars", "Forks": "forks"
             })
         else:
             raise ValueError("Invalid CSV format: missing 'repository' column")
+    # M-5: validate date column exists after renaming so callers get 400 not a 500 KeyError later
+    if "date" not in raw_df.columns:
+        raise ValueError("Invalid CSV format: missing required 'date' column")
     return raw_df
 
 
 def _parse_raw(val) -> list:
-    # Try JSON first, then Python literal eval, then give up and return an empty list
+    # Try JSON first, then Python literal eval, then give up
     if isinstance(val, str) and val.strip() != "":
         try:
             return json.loads(val)
@@ -149,39 +134,60 @@ def _parse_raw(val) -> list:
     return []
 
 
-def build_react_payload(df: pd.DataFrame) -> list:
+def _safe_int(val, fallback=0) -> int:
+    try:
+        return int(val) if val is not None and str(val) not in ("", "nan", "None") else fallback
+    except Exception:
+        return fallback
+
+
+def _safe_str(val, fallback="") -> str:
+    if val is None or str(val) in ("nan", "None", ""):
+        return fallback
+    return str(val)
+
+
+def build_react_payload(df: pd.DataFrame, deep_stats: dict = None) -> list:
     """
-    Transforms the Tidy Data DataFrame into the exact array of RepoTraffic objects
-    expected by the React dashboard. Prevents duplicate rows and populates all chart data.
+    Transforms the Tidy DataFrame into the RepoTraffic array the React dashboard expects.
+    Optionally merges in deep stats (commits, PRs, releases, README) for the top 20 repos.
     """
     if df.empty:
         return []
 
+    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     repos = []
+
     for repo, group in df.groupby("repository"):
-        # Sort so the timeseries arrays are always oldest → newest
         group = group.sort_values("date")
 
-        # Sum traffic metrics across the whole window
         r_views = int(group["views"].sum()) if "views" in group.columns else 0
         r_clones = int(group["clones"].sum()) if "clones" in group.columns else 0
         r_unique_v = int(group["unique_visitors"].sum()) if "unique_visitors" in group.columns else 0
         r_unique_c = int(group["unique_cloners"].sum()) if "unique_cloners" in group.columns else 0
-
-        # Snapshot metrics — always from the most recent row to avoid inflating numbers
-        r_stars = int(group["stars"].dropna().iloc[-1]) if "stars" in group.columns and not group["stars"].dropna().empty else 0
-        r_forks = int(group["forks"].dropna().iloc[-1]) if "forks" in group.columns and not group["forks"].dropna().empty else 0
+        r_stars = _safe_int(group["stars"].dropna().iloc[-1]) if "stars" in group.columns and not group["stars"].dropna().empty else 0
+        r_forks = _safe_int(group["forks"].dropna().iloc[-1]) if "forks" in group.columns and not group["forks"].dropna().empty else 0
         r_is_private = bool(group["is_private"].dropna().iloc[-1]) if "is_private" in group.columns and not group["is_private"].dropna().empty else False
 
-        top_ref = str(group["top_referrer"].dropna().iloc[-1]) if "top_referrer" in group.columns and not group["top_referrer"].dropna().empty else ""
-        top_ref_views = int(group["top_referrer_views"].dropna().iloc[-1]) if "top_referrer_views" in group.columns and not group["top_referrer_views"].dropna().empty else 0
-        top_ref_uniques = int(group["top_referrer_uniques"].dropna().iloc[-1]) if "top_referrer_uniques" in group.columns and not group["top_referrer_uniques"].dropna().empty else 0
+        top_ref = _safe_str(group["top_referrer"].dropna().iloc[-1]) if "top_referrer" in group.columns and not group["top_referrer"].dropna().empty else ""
+        top_ref_views = _safe_int(group["top_referrer_views"].dropna().iloc[-1]) if "top_referrer_views" in group.columns and not group["top_referrer_views"].dropna().empty else 0
+        top_ref_uniques = _safe_int(group["top_referrer_uniques"].dropna().iloc[-1]) if "top_referrer_uniques" in group.columns and not group["top_referrer_uniques"].dropna().empty else 0
+        top_path = _safe_str(group["top_path"].dropna().iloc[-1]) if "top_path" in group.columns and not group["top_path"].dropna().empty else ""
+        top_path_views = _safe_int(group["top_path_views"].dropna().iloc[-1]) if "top_path_views" in group.columns and not group["top_path_views"].dropna().empty else 0
+        top_path_uniques = _safe_int(group["top_path_uniques"].dropna().iloc[-1]) if "top_path_uniques" in group.columns and not group["top_path_uniques"].dropna().empty else 0
 
-        top_path = str(group["top_path"].dropna().iloc[-1]) if "top_path" in group.columns and not group["top_path"].dropna().empty else ""
-        top_path_views = int(group["top_path_views"].dropna().iloc[-1]) if "top_path_views" in group.columns and not group["top_path_views"].dropna().empty else 0
-        top_path_uniques = int(group["top_path_uniques"].dropna().iloc[-1]) if "top_path_uniques" in group.columns and not group["top_path_uniques"].dropna().empty else 0
+        # Repo-level metadata from the CSV rows (populated by build_tidy_rows)
+        language = _safe_str(group["language"].dropna().iloc[-1]) if "language" in group.columns and not group["language"].dropna().empty else None
+        watchers_count = _safe_int(group["watchers_count"].dropna().iloc[-1]) if "watchers_count" in group.columns and not group["watchers_count"].dropna().empty else 0
+        open_issues_count = _safe_int(group["open_issues_count"].dropna().iloc[-1]) if "open_issues_count" in group.columns and not group["open_issues_count"].dropna().empty else 0
+        pushed_at = _safe_str(group["pushed_at"].dropna().iloc[-1]) if "pushed_at" in group.columns and not group["pushed_at"].dropna().empty else None
+        created_at = _safe_str(group["created_at"].dropna().iloc[-1]) if "created_at" in group.columns and not group["created_at"].dropna().empty else None
 
-        # Build separate daily arrays for the views and clones line charts
+        # Topics stored as JSON string in CSV
+        topics_raw = group["topics"].dropna().iloc[-1] if "topics" in group.columns and not group["topics"].dropna().empty else None
+        topics = _parse_raw(topics_raw) if topics_raw else []
+
+        # Daily arrays for charts
         daily_views = []
         daily_clones = []
         for _, row in group.iterrows():
@@ -194,24 +200,21 @@ def build_react_payload(df: pd.DataFrame) -> list:
             daily_clones.append({
                 "timestamp": date_str,
                 "count": int(row.get("clones", 0)),
-                "uniques": int(row.get("unique_visitor", 0) if "unique_visitor" in row else row.get("unique_cloners", 0))
+                "uniques": int(row.get("unique_cloners", 0))  # fixed typo
             })
 
-        # Use the most recent row's raw data — it reflects the current referrer ranking
         raw_refs_val = group["_raw_referrers"].iloc[-1] if "_raw_referrers" in group.columns else None
         raw_paths_val = group["_raw_paths"].iloc[-1] if "_raw_paths" in group.columns else None
-
-        # Decode the JSON-encoded full referrer and path lists
         full_refs = _parse_raw(raw_refs_val)
         full_paths = _parse_raw(raw_paths_val)
 
-        # Fall back to the summary columns if the raw JSON columns are missing
         if not full_refs and top_ref:
             full_refs = [{"referrer": top_ref, "count": top_ref_views, "uniques": top_ref_uniques}]
         if not full_paths and top_path:
             full_paths = [{"path": top_path, "title": top_path, "count": top_path_views, "uniques": top_path_uniques}]
 
-        repos.append({
+        # Start building the repo object
+        repo_obj = {
             "repository": repo,
             "is_private": r_is_private,
             "stars": r_stars,
@@ -226,12 +229,37 @@ def build_react_payload(df: pd.DataFrame) -> list:
             "top_path": top_path,
             "top_path_views": top_path_views,
             "top_path_uniques": top_path_uniques,
-            # Per-day arrays for the charts
+            "fetched_at": fetched_at,
+            # Repo metadata (available from GitHub API, None for CSV uploads)
+            "language": language if language else None,
+            "topics": topics if topics else [],
+            "watchers_count": watchers_count,
+            "open_issues_count": open_issues_count,
+            "pushed_at": pushed_at,
+            "created_at": created_at,
+            # Deep stats — None by default, only populated for top 20 in Live API mode
+            "total_commits": None,
+            "open_prs": None,
+            "total_releases": None,
+            "last_release_at": None,
+            "has_readme": None,
+            "has_license": None,
+            "has_contributing": None,
+            "has_code_of_conduct": None,
             "_daily_views": daily_views,
             "_daily_clones": daily_clones,
-            # Full referrer and path breakdowns for the pie/bar charts
             "_referrers": full_refs,
             "_paths": full_paths
-        })
+        }
+
+        # Merge deep stats if available for this repo
+        if deep_stats and repo in deep_stats:
+            ds = deep_stats[repo]
+            for key in ("total_commits", "open_prs", "total_releases", "last_release_at",
+                        "has_readme", "has_license", "has_contributing", "has_code_of_conduct"):
+                if ds.get(key) is not None:
+                    repo_obj[key] = ds[key]
+
+        repos.append(repo_obj)
 
     return repos

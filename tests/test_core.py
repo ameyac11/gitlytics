@@ -118,7 +118,7 @@ class TestGetUserProfile:
         mock_get.return_value = mock_response
 
         profile = get_user_profile("bad_token")
-        assert profile == {"login": "", "name": "", "avatar_url": ""}
+        assert profile == {"login": "", "name": "", "avatar_url": "", "followers": 0, "following": 0}
 
 
 # ── pad_traffic_data ──────────────────────────────────────────────────────────

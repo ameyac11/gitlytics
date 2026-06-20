@@ -15,7 +15,7 @@ from croniter import croniter
 import pandas as pd
 
 from gitlytics.core import fetch_traffic_data, validate_token
-from gitlytics.process import build_json_payload
+from gitlytics.process import build_json_payload, build_react_payload
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,10 @@ def export_json_database(data_dir: str, export_path: str, export_public_only: bo
     if "date" in master_df.columns and "repository" in master_df.columns:
         master_df = master_df.drop_duplicates(subset=["date", "repository"], keep="last")
 
-    # Transform into the nested JSON structure the React dashboard expects
-    payload = build_json_payload(master_df, return_format="timeseries", export_public_only=export_public_only)
+    # M-3: use build_react_payload (list format) so the export matches what the dashboard expects
+    if export_public_only and "is_private" in master_df.columns:
+        master_df = master_df[~master_df["is_private"]]
+    payload = build_react_payload(master_df)
 
     # Write the JSON to disk, creating parent folders if needed
     export_file = Path(export_path).resolve()
@@ -90,9 +92,9 @@ def _merge_schema(existing_fields: list, new_fields: list) -> list:
     return merged
 
 
-def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="monthly", export_json=None, export_public_only=True):
+def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="monthly", export_json=None, export_public_only=True, metrics: list = None):
     # Fetch fresh traffic data from GitHub
-    df = fetch_traffic_data(token, repo_names)
+    df = fetch_traffic_data(token, repo_names, metrics)
     if df.empty:
         logger.info("No traffic data found to sync.")
         return
@@ -159,17 +161,16 @@ def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="
         logger.info(f"Exported historical database to {export_json}")
 
 
-def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthly", schedule_cron=None, export_json=None, export_public_only=True):
+def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthly", schedule_cron=None, export_json=None, export_public_only=True, metrics: list = None):
     # No cron expression = run once and exit
     if not schedule_cron:
-        run_sync_cycle(token, repo_names, data_dir, output_mode, export_json, export_public_only)
+        run_sync_cycle(token, repo_names, data_dir, output_mode, export_json, export_public_only, metrics)
         return
 
     logger.info("Starting Background Cron Job...")
     # Parse the cron expression — fail early if the format is wrong
     try:
-        now_utc = datetime.now(timezone.utc)
-        iter = croniter(schedule_cron, now_utc)
+        croniter(schedule_cron, datetime.now(timezone.utc))  # validate only
     except ValueError as e:
         logger.error(f"Invalid cron expression: {e}")
         return
@@ -177,7 +178,9 @@ def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthl
     # Infinite loop — keeps running until the process is killed or the token dies
     while True:
         now_utc = datetime.now(timezone.utc)
-        next_run = iter.get_next(datetime)
+        # M-2+L-3: re-anchor each iteration to prevent clock-jump skips; rename from 'iter'
+        cron_iter = croniter(schedule_cron, now_utc)
+        next_run = cron_iter.get_next(datetime)
 
         # croniter may return naive datetimes on older versions — make it timezone-aware
         if next_run.tzinfo is None:
@@ -211,7 +214,7 @@ def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthl
                     logger.warning(f"Network drop or temporary error: {msg}. Retrying next cycle.")
                     continue
 
-            run_sync_cycle(token, repo_names, data_dir, output_mode, export_json, export_public_only)
+            run_sync_cycle(token, repo_names, data_dir, output_mode, export_json, export_public_only, metrics)
         except Exception as e:
             # Don't let a single bad cycle kill the daemon — just log and carry on
             logger.error(f"Daemon encountered unexpected error: {e}. Recovering for next cycle.")

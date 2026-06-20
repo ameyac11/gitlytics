@@ -44,7 +44,6 @@
 :root {
   --radius: 0.75rem;
 
-  /* Pure black, warm-gray surfaces, Claude coral accent */
   --background: #000000;
   --foreground: #ece7e1;
 
@@ -56,7 +55,6 @@
   --popover: #161514;
   --popover-foreground: #ece7e1;
 
-  /* Claude coral / orange #D97757 */
   --primary: #d97757;
   --primary-foreground: #1a120e;
 
@@ -69,7 +67,6 @@
   --accent: #262320;
   --accent-foreground: #ece7e1;
 
-  /* Muted sage */
   --success: #94a187;
   --success-foreground: #14130f;
 
@@ -80,11 +77,11 @@
   --input: #2a2723;
   --ring: #d97757;
 
-  --chart-1: #d97757; /* coral */
-  --chart-2: #e8c396; /* soft sand */
-  --chart-3: #94a187; /* sage */
-  --chart-4: #c9a87c; /* warm tan */
-  --chart-5: #b5715a; /* deep coral */
+  --chart-1: #d97757;
+  --chart-2: #e8c396;
+  --chart-3: #94a187;
+  --chart-4: #c9a87c;
+  --chart-5: #b5715a;
 }
 
 @layer base {
@@ -109,7 +106,6 @@
   border: 1px solid var(--border);
 }
 
-
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
@@ -118,3 +114,40 @@
 @utility animate-slide-up {
   animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+@keyframes gitlytics-indeterminate {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(420%); }
+}
+.gitlytics-indeterminate {
+  animation: gitlytics-indeterminate 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.text-trend-up { color: #22c55e; }
+.text-trend-down { color: #ef4444; }
+.bg-trend-up\/10 { background-color: rgba(34,197,94,0.10); }
+.bg-trend-down\/10 { background-color: rgba(239,68,68,0.10); }
+.ring-trend-up\/25 { box-shadow: inset 0 0 0 1px rgba(34,197,94,0.30); }
+.ring-trend-down\/25 { box-shadow: inset 0 0 0 1px rgba(239,68,68,0.30); }
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--primary) 55%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--primary) 55%, transparent);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--primary) 80%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
