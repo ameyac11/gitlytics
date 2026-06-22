@@ -187,8 +187,17 @@ def get_traffic(token: str = Body("", embed=True)):
 
 @app.post("/api/upload-csv")
 def upload_csv(file: UploadFile = File(...)):
-    # Accept a user-uploaded CSV — deep stats not available in CSV mode
     try:
+        data_dir = os.environ.get("GITLYTICS_DATA_DIR")
+        if data_dir:
+            data_dir_path = Path(data_dir)
+            data_dir_path.mkdir(parents=True, exist_ok=True)
+            file.file.seek(0)
+            content = file.file.read()
+            file.file.seek(0)
+            dest = data_dir_path / f"traffic_uploaded_{int(_time.time())}.csv"
+            with open(dest, "wb") as f:
+                f.write(content)
         df = process_uploaded_csv(file.file)
         df = df.replace([float('inf'), float('-inf')], None).where(pd.notnull(df), None)
         payload = build_react_payload(df, deep_stats=None)
@@ -208,7 +217,7 @@ def serve_index():
         return FileResponse(index_file)
     return JSONResponse(
         status_code=503,
-        content={"error": "Dashboard not found. Run 'npm run build' in the dashboard directory."}
+        content={"error": "Dashboard assets not found in the package installation."}
     )
 
 
@@ -225,7 +234,7 @@ def serve_spa_fallback(full_path: str):
 
     return JSONResponse(
         status_code=503,
-        content={"error": "Dashboard not found. Run 'npm run build' in the dashboard directory."}
+        content={"error": "Dashboard assets not found in the package installation."}
     )
 
 

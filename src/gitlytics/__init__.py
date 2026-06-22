@@ -8,7 +8,7 @@ import json
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.1.7"
+__version__ = "0.2.0"
 
 __all__ = ["fetch_traffic", "sync", "serve_dashboard", "__version__"]
 

@@ -21,6 +21,3 @@ htmlcov/
 # OS and logs
 .DS_Store
 *.log
-
-# Built frontend assets
-src/gitlytics/static

@@ -312,6 +312,21 @@ class TestUploadCsvEndpoint:
         response = self._upload(["repository", "date", "views"], ["user/repo", "2025-06-14", 10])
         assert isinstance(response.json(), list)
 
+    def test_persists_uploaded_csv_if_data_dir_set(self, tmp_path):
+        # Save to temp directory if env var set
+        from pathlib import Path
+        data_dir = tmp_path / "data"
+        with patch.dict("os.environ", {"GITLYTICS_DATA_DIR": str(data_dir)}, clear=False):
+            response = self._upload(
+                ["repository", "date", "views"],
+                ["user/repo", "2025-06-14", 42]
+            )
+            assert response.status_code == 200
+            csv_files = list(data_dir.glob("traffic_uploaded_*.csv"))
+            assert len(csv_files) == 1
+            saved_content = csv_files[0].read_text()
+            assert "user/repo" in saved_content
+
 
 # ── Root and SPA fallback ──────────────────────────────────────────────────────
 
