@@ -7,9 +7,20 @@ import json
 import logging
 from datetime import datetime, timezone
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def _is_nullish(val) -> bool:
+    # True for None, NaN, empty string, and the literal "nan"/"None" strings.
+    if val is None:
+        return True
+    if isinstance(val, float) and np.isnan(val):
+        return True
+    s = str(val).strip().lower()
+    return s in ("", "nan", "none", "null")
 
 
 def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", export_public_only: bool = True) -> dict:
@@ -43,8 +54,8 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
         r_forks = _safe_int(group["forks"].dropna().iloc[-1]) if "forks" in group.columns and not group["forks"].dropna().empty else 0
         r_is_private = bool(group["is_private"].dropna().iloc[-1]) if "is_private" in group.columns and not group["is_private"].dropna().empty else False
 
-        top_ref = str(group["top_referrer"].dropna().iloc[-1]) if "top_referrer" in group.columns and not group["top_referrer"].dropna().empty else ""
-        top_path = str(group["top_path"].dropna().iloc[-1]) if "top_path" in group.columns and not group["top_path"].dropna().empty else ""
+        top_ref = _safe_str(group["top_referrer"].dropna().iloc[-1]) if "top_referrer" in group.columns and not group["top_referrer"].dropna().empty else ""
+        top_path = _safe_str(group["top_path"].dropna().iloc[-1]) if "top_path" in group.columns and not group["top_path"].dropna().empty else ""
 
         account_views += r_views
         account_clones += r_clones
@@ -68,10 +79,10 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
             for _, row in group.iterrows():
                 timeseries.append({
                     "date": str(row["date"]),
-                    "views": int(row.get("views", 0)),
-                    "unique_visitors": int(row.get("unique_visitors", 0)),
-                    "clones": int(row.get("clones", 0)),
-                    "unique_cloners": int(row.get("unique_cloners", 0))
+                    "views": int(row.get("views", 0) or 0),
+                    "unique_visitors": int(row.get("unique_visitors", 0) or 0),
+                    "clones": int(row.get("clones", 0) or 0),
+                    "unique_cloners": int(row.get("unique_cloners", 0) or 0)
                 })
 
             repos_dict[repo] = {
@@ -104,18 +115,17 @@ def process_uploaded_csv(uploaded_file) -> pd.DataFrame:
     """Reads a user-uploaded CSV and normalises column names to match our tidy schema."""
     raw_df = pd.read_csv(uploaded_file)
 
-    # Normalise capitalized "Date" column before any other checks
-    if "Date" in raw_df.columns and "date" not in raw_df.columns:
-        raw_df = raw_df.rename(columns={"Date": "date"})
+    # Strip BOMs and lower-case every header up front so any common title-case
+    # or mixed-case export (e.g. hand-edited CSVs, older versions, third-party tools)
+    # is accepted.
+    raw_df.columns = [str(c).lstrip("﻿").strip() for c in raw_df.columns]
+    rename_lower = {c: c.lower() for c in raw_df.columns}
+    raw_df = raw_df.rename(columns=rename_lower)
 
     if "repository" not in raw_df.columns:
+        # Last-resort fallback: accept the legacy "Repository" + "Total Views" etc.
         if "repo_name" in raw_df.columns:
             raw_df = raw_df.rename(columns={"repo_name": "repository"})
-        elif "Repository" in raw_df.columns:
-            raw_df = raw_df.rename(columns={
-                "Repository": "repository", "Total Views": "views", "Unique Visitors": "unique_visitors",
-                "Total Clones": "clones", "Unique Cloners": "unique_cloners", "Stars": "stars", "Forks": "forks"
-            })
         else:
             raise ValueError("Invalid CSV format: missing 'repository' column")
 
@@ -126,28 +136,31 @@ def process_uploaded_csv(uploaded_file) -> pd.DataFrame:
 
 def _parse_raw(val) -> list:
     # Try JSON first, then Python literal eval, then give up
-    if isinstance(val, str) and val.strip() != "":
-        try:
-            return json.loads(val)
-        except Exception:
-            try:
-                return ast.literal_eval(val)
-            except Exception:
-                return []
+    if _is_nullish(val):
+        return []
     if isinstance(val, list):
         return val
-    return []
+    try:
+        return json.loads(val)
+    except Exception:
+        try:
+            return ast.literal_eval(val)
+        except Exception:
+            logger.warning(f"_parse_raw: could not decode value {val!r:.80}; returning []")
+            return []
 
 
 def _safe_int(val, fallback=0) -> int:
+    if _is_nullish(val):
+        return fallback
     try:
-        return int(val) if val is not None and str(val) not in ("", "nan", "None") else fallback
-    except Exception:
+        return int(float(val))
+    except (TypeError, ValueError):
         return fallback
 
 
 def _safe_str(val, fallback="") -> str:
-    if val is None or str(val) in ("nan", "None", ""):
+    if _is_nullish(val):
         return fallback
     return str(val)
 
@@ -162,6 +175,12 @@ def build_react_payload(df: pd.DataFrame, deep_stats: dict = None) -> list:
 
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     repos = []
+
+    # Deep-stat keys we copy from the deep_stats dict into each repo object.
+    _DEEP_KEYS = (
+        "total_commits", "open_prs", "total_releases", "last_release_at",
+        "has_readme", "has_license", "has_contributing", "has_code_of_conduct",
+    )
 
     for repo, group in df.groupby("repository"):
         group = group.sort_values("date")
@@ -205,7 +224,7 @@ def build_react_payload(df: pd.DataFrame, deep_stats: dict = None) -> list:
             daily_clones.append({
                 "timestamp": date_str,
                 "count": _safe_int(row.get("clones", 0)),
-                "uniques": _safe_int(row.get("unique_cloners", 0))  # fixed typo
+                "uniques": _safe_int(row.get("unique_cloners", 0))
             })
 
         raw_refs_val = group["_raw_referrers"].iloc[-1] if "_raw_referrers" in group.columns else None
@@ -242,28 +261,20 @@ def build_react_payload(df: pd.DataFrame, deep_stats: dict = None) -> list:
             "open_issues_count": open_issues_count,
             "pushed_at": pushed_at,
             "created_at": created_at,
-            # Deep stats — None by default, only populated for top 20 in Live API mode
-            "total_commits": None,
-            "open_prs": None,
-            "total_releases": None,
-            "last_release_at": None,
-            "has_readme": None,
-            "has_license": None,
-            "has_contributing": None,
-            "has_code_of_conduct": None,
             "_daily_views": daily_views,
             "_daily_clones": daily_clones,
             "_referrers": full_refs,
             "_paths": full_paths
         }
 
-        # Merge deep stats if available for this repo
+        # Merge deep stats if available for this repo. Only include keys that
+        # actually have a non-null value — keeps the dashboard payload tight.
         if deep_stats and repo in deep_stats:
             ds = deep_stats[repo]
-            for key in ("total_commits", "open_prs", "total_releases", "last_release_at",
-                        "has_readme", "has_license", "has_contributing", "has_code_of_conduct"):
-                if ds.get(key) is not None:
-                    repo_obj[key] = ds[key]
+            for key in _DEEP_KEYS:
+                value = ds.get(key)
+                if value is not None:
+                    repo_obj[key] = value
 
         repos.append(repo_obj)
 

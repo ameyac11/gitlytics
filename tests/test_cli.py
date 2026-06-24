@@ -38,12 +38,12 @@ class TestParseRepoNames:
 # ── CLI dispatch ──────────────────────────────────────────────────────────────
 
 class TestCliNoArgs:
-    def test_no_args_prints_help_and_exits_1(self, capsys):
-        # Running with no subcommand must print help and exit with code 1
+    def test_no_args_prints_help_and_exits_0(self, capsys):
+        # Bug fix: no-arg invocation should exit 0 (standard CLI behavior), not 1
         with patch.object(sys, "argv", ["gitlytics"]):
             with pytest.raises(SystemExit) as exc:
                 main()
-        assert exc.value.code == 1
+        assert exc.value.code == 0
 
 
 class TestCliFetchCommand:
@@ -128,3 +128,31 @@ class TestCliDashboardCommand:
         call_kwargs = mock_serve.call_args.kwargs
         assert call_kwargs.get("host") == "0.0.0.0"
         assert call_kwargs.get("port") == 9000
+
+
+# ── Token whitespace + invalid repo name (v0.2.1 fixes) ──────────────────────
+
+class TestCliTokenStripping:
+    @patch("gitlytics.cli.fetch_traffic")
+    def test_token_is_stripped(self, mock_fetch):
+        # Bug fix: trailing whitespace from copy-paste should not cause a 401
+        mock_fetch.return_value = MagicMock()
+        with patch.object(sys, "argv", [
+            "gitlytics", "fetch", "--token", "  spaced_token  ", "--print-table"
+        ]):
+            main()
+        kwargs = mock_fetch.call_args.kwargs
+        assert kwargs.get("token") == "spaced_token"
+
+
+class TestCliRepoNameValidation:
+    @patch("gitlytics.cli.fetch_traffic")
+    def test_repo_name_without_slash_exits_2(self, mock_fetch, capsys):
+        # Bug fix: a malformed --repo-name must exit 2 with a clear error, not crash
+        with patch.object(sys, "argv", [
+            "gitlytics", "fetch", "--token", "tok", "--repo-name", "no-slash-here"
+        ]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 2
+        mock_fetch.assert_not_called()

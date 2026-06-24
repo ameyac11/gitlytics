@@ -5,7 +5,9 @@ Powers the FastAPI backend — serves traffic data and the React dashboard to th
 import hashlib
 import logging
 import os
+import shutil
 import time as _time
+import uuid
 from pathlib import Path
 
 import pandas as pd
@@ -28,15 +30,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="GitHub Traffic API")
 
-# Only allow requests from localhost — never deployed publicly
+# Only allow requests from localhost — never deployed publicly.
+# Vite's dev port (5173) is intentionally excluded from the production allowlist.
 _ALLOWED_ORIGINS = [
     "http://localhost",
     "http://localhost:3000",
-    "http://localhost:5173",
     "http://localhost:8000",
     "http://127.0.0.1",
     "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
 ]
 
@@ -45,12 +46,17 @@ app.add_middleware(
     allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    # `Authorization` is required for cross-origin deployments that pass the
+    # GitHub PAT in a header. Same-origin requests are unaffected.
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
 _auth_cache: dict = {}  # sha256_prefix -> (valid, username, expires_at)
 _AUTH_CACHE_TTL = 300  # 5 minutes
+
+# Hard cap on CSV upload size — prevents DoS via /api/upload-csv.
+_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 def _get_token(token: str = None) -> str:
@@ -62,14 +68,14 @@ def _get_token(token: str = None) -> str:
 
 def _validate_token_cached(token: str):
     # M-1: cache validation results to avoid a double HTTP round-trip on every /api/traffic call
+    from gitlytics.core import validate_token as _validate_token
     key = hashlib.sha256(token.encode()).hexdigest()[:16]
     now = _time.time()
     if key in _auth_cache:
         valid, username, expires = _auth_cache[key]
         if now < expires:
             return valid, username
-    from gitlytics.core import validate_token
-    valid, username = validate_token(token)
+    valid, username = _validate_token(token)
     _auth_cache[key] = (valid, username, now + _AUTH_CACHE_TTL)
     return valid, username
 
@@ -115,10 +121,22 @@ def get_username_data(username: str = Body("", embed=True)):
         raise HTTPException(status_code=400, detail="Username is required.")
     try:
         profile = get_public_user(username.strip())
+        # Distinguish "user found" (login matches the request) from "GitHub failed
+        # and we returned a stub". Returning 200 for the latter would silently mask
+        # upstream outages.
+        if profile.get("login") == username.strip() and profile.get("html_url"):
+            pass
+        elif profile.get("login") == username.strip():
+            # Found but GitHub didn't include html_url — still treat as success.
+            pass
+        else:
+            raise HTTPException(status_code=502, detail="GitHub did not return a profile.")
         repos = get_public_repos(username.strip())
         return {"profile": profile, "repos": repos}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning(f"Username fetch failed for {username}: {exc}")
         raise HTTPException(status_code=500, detail="Failed to fetch GitHub data.")
@@ -170,9 +188,14 @@ def get_traffic(token: str = Body("", embed=True)):
 
     df = df.replace([float('inf'), float('-inf')], None).where(pd.notnull(df), None)
 
-    # Build a quick view-sum map to find the top 20 repos for deep fetching
+    # Build a quick view-sum map to find the top 20 repos for deep fetching.
+    # Guard against the subset-metrics case where `views` may be absent.
     repos_with_views = []
-    if not df.empty and "repository" in df.columns and "views" in df.columns:
+    if (
+        not df.empty
+        and "repository" in df.columns
+        and "views" in df.columns
+    ):
         for repo_name, group in df.groupby("repository"):
             repos_with_views.append({"repository": repo_name, "total_views": int(group["views"].sum())})
 
@@ -192,16 +215,34 @@ def upload_csv(file: UploadFile = File(...)):
         if data_dir:
             data_dir_path = Path(data_dir)
             data_dir_path.mkdir(parents=True, exist_ok=True)
+            # Stream the upload to disk so we don't buffer the whole file in
+            # memory. Enforce the size cap on the way in.
+            dest = data_dir_path / f"traffic_uploaded_{uuid.uuid4().hex}.csv"
+            total = 0
+            with open(dest, "wb") as out:
+                while True:
+                    chunk = file.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > _MAX_UPLOAD_BYTES:
+                        out.close()
+                        try:
+                            dest.unlink()
+                        except OSError:
+                            pass
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"CSV too large. Maximum size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                        )
+                    out.write(chunk)
             file.file.seek(0)
-            content = file.file.read()
-            file.file.seek(0)
-            dest = data_dir_path / f"traffic_uploaded_{int(_time.time())}.csv"
-            with open(dest, "wb") as f:
-                f.write(content)
         df = process_uploaded_csv(file.file)
         df = df.replace([float('inf'), float('-inf')], None).where(pd.notnull(df), None)
         payload = build_react_payload(df, deep_stats=None)
         return payload
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -224,6 +265,10 @@ def serve_index():
 @app.get("/{full_path:path}")
 def serve_spa_fallback(full_path: str):
     """SPA catch-all — returns index.html so React Router handles navigation."""
+    # Any unhandled /api/* path is a real 404, not a SPA route.
+    if full_path.startswith("api/"):
+        return JSONResponse(status_code=404, content={"error": "Not found."})
+
     asset_file = frontend_dir / full_path
     if asset_file.exists() and asset_file.is_file():
         return FileResponse(asset_file)

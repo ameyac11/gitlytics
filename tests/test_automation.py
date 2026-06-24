@@ -199,3 +199,29 @@ class TestRunSyncCycle:
         # views must be updated; clones must NOT be erased
         assert rows[0]["views"] == "99"
         assert rows[0]["clones"] == "5"
+
+    @patch("gitlytics.automation.fetch_traffic_data")
+    def test_uppercase_header_csv_is_accepted(self, mock_fetch, tmp_path):
+        # Bug fix: column comparison should be case-insensitive so an exported
+        # CSV with 'Date'/'Repository' headers is migrated correctly.
+        # First run: write CSV with the standard lowercase headers
+        mock_fetch.return_value = _make_df()
+        run_sync_cycle("dummy_token", data_dir=str(tmp_path))
+
+        # Manually rewrite the CSV with TITLE-CASE headers to simulate an
+        # export from an older version of the library (or hand-edited file).
+        csv_file = list(tmp_path.glob("traffic_*.csv"))[0]
+        content = csv_file.read_text(encoding="utf-8")
+        title_cased = (
+            content.replace("date", "Date")
+                   .replace("repository", "Repository")
+                   .replace("views", "Views")
+        )
+        csv_file.write_text(title_cased, encoding="utf-8")
+
+        # Second run should NOT crash; the schema should be normalised internally.
+        mock_fetch.return_value = _make_df(date="2025-06-15")
+        run_sync_cycle("dummy_token", data_dir=str(tmp_path))
+
+        rows = list(csv.DictReader(open(csv_file, "r", encoding="utf-8")))
+        assert len(rows) == 2  # both rows preserved

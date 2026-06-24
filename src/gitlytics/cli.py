@@ -6,7 +6,6 @@ Achieves 100% feature parity with the Python API.
 import argparse
 import sys
 import os
-import json
 
 # Import the three public functions that power every subcommand
 from gitlytics import fetch_traffic, sync, serve_dashboard
@@ -16,7 +15,14 @@ def parse_repo_names(repo_arg: str):
     # Turn "owner/repo1, owner/repo2" into ["owner/repo1", "owner/repo2"], or None if empty
     if not repo_arg:
         return None
-    return [r.strip() for r in repo_arg.split(",")]
+    names = [r.strip() for r in repo_arg.split(",")]
+    # Validate the format up front so the user gets a clear error instead of a 404.
+    for name in names:
+        if "/" not in name:
+            raise argparse.ArgumentTypeError(
+                f"Invalid repo name {name!r}: expected 'owner/repo' format."
+            )
+    return names
 
 
 def main():
@@ -72,13 +78,14 @@ def main():
 
     args = parser.parse_args()
 
-    # Print help and exit if the user didn't give a subcommand
+    # Print help and exit cleanly (code 0) if the user didn't give a subcommand.
     if not args.command:
         parser.print_help()
-        sys.exit(1)
+        sys.exit(0)
 
     # Resolve token: CLI flag wins, then environment variables
-    token = getattr(args, "token", None) or os.environ.get("GITLYTICS_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    raw_token = getattr(args, "token", None)
+    token = (raw_token or os.environ.get("GITLYTICS_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip() or None
 
     # fetch and sync both need a token — bail early with a clear message
     if args.command in ["fetch", "sync"] and not token:
@@ -86,31 +93,56 @@ def main():
         sys.exit(1)
 
     if args.command == "fetch":
-        repos = parse_repo_names(args.repo_name)
-        result = fetch_traffic(
-            token=token,
-            repo_name=repos,
-            print_table=args.print_table,
-            return_format=args.return_format,
-            save_file=args.save_file,
-            metrics=args.metrics
-        )
+        try:
+            repos = parse_repo_names(args.repo_name)
+        except argparse.ArgumentTypeError as exc:
+            print(f"❌ Error: {exc}")
+            sys.exit(2)
+        try:
+            result = fetch_traffic(
+                token=token,
+                repo_name=repos,
+                print_table=args.print_table,
+                return_format=args.return_format,
+                save_file=args.save_file,
+                metrics=args.metrics
+            )
+        except ValueError as exc:
+            print(f"❌ Error: {exc}")
+            sys.exit(2)
         # Give the user a hint if they didn't ask for any output
         if not args.print_table and not args.save_file:
-            print("Fetch successful. Use --print-table or --save-file to see results.")
+            try:
+                import pandas as pd
+                if isinstance(result, pd.DataFrame):
+                    print(f"Fetch successful. {len(result)} row(s) across {result['repository'].nunique() if not result.empty else 0} repo(s).")
+                    print("First 5 rows:")
+                    print(result.head().to_string(index=False))
+                else:
+                    print(f"Fetch successful. Use --print-table or --save-file to see results.")
+            except Exception:
+                print("Fetch successful. Use --print-table or --save-file to see results.")
 
     elif args.command == "sync":
-        repos = parse_repo_names(args.repo_name)
-        sync(
-            token=token,
-            repo_name=repos,
-            data_dir=args.data_dir,
-            output_mode=args.output_mode,
-            schedule_cron=args.schedule_cron,
-            export_json=args.export_json,
-            export_public_only=args.export_public_only,
-            metrics=args.metrics
-        )
+        try:
+            repos = parse_repo_names(args.repo_name)
+        except argparse.ArgumentTypeError as exc:
+            print(f"❌ Error: {exc}")
+            sys.exit(2)
+        try:
+            sync(
+                token=token,
+                repo_name=repos,
+                data_dir=args.data_dir,
+                output_mode=args.output_mode,
+                schedule_cron=args.schedule_cron,
+                export_json=args.export_json,
+                export_public_only=args.export_public_only,
+                metrics=args.metrics
+            )
+        except ValueError as exc:
+            print(f"❌ Error: {exc}")
+            sys.exit(2)
 
     elif args.command == "dashboard":
         print(f"\n[Gitlytics] Starting Gitlytics Dashboard on http://{args.host}:{args.port}\n")

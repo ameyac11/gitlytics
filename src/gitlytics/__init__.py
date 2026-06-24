@@ -5,10 +5,11 @@ The public API for the gitlytics package.
 import os
 import logging
 import json
+from pathlib import Path
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.2.0"
+__version__ = "0.2.2"
 
 __all__ = ["fetch_traffic", "sync", "serve_dashboard", "__version__"]
 
@@ -20,6 +21,44 @@ from .process import build_json_payload
 # Set up a silent logger so gitlytics never messes with your app's logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
+
+
+_VALID_METRICS = {
+    "views", "clones", "referrers", "paths", "stars", "forks",
+    "language", "topics", "watchers_count", "pushed_at",
+    "created_at", "open_issues_count",
+}
+
+
+def _coerce_metrics(metrics):
+    # Accept list, tuple, or set. Reject strings, ints, dicts, etc.
+    if metrics is None:
+        return None
+    if isinstance(metrics, str):
+        raise ValueError(
+            "metrics must be a list/tuple/set of strings, not a single string. "
+            "Pass ['views', 'clones'] instead of 'views clones'."
+        )
+    if isinstance(metrics, (list, tuple, set, frozenset)):
+        result = list(metrics)
+        for m in result:
+            if not isinstance(m, str):
+                raise ValueError(f"metrics entries must be strings; got {type(m).__name__}.")
+        # Drop unknown metric names with a warning — better than crashing mid-fetch.
+        unknown = [m for m in result if m not in _VALID_METRICS]
+        if unknown:
+            logger.warning(f"Unknown metrics ignored: {unknown}")
+            result = [m for m in result if m in _VALID_METRICS]
+        return result
+    raise ValueError(f"metrics must be a list/tuple/set; got {type(metrics).__name__}.")
+
+
+def _write_json_safely(path: str, payload: dict) -> None:
+    # Create the parent dir so the user can pass any nested path.
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
 
 
 def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_format: str = "dataframe", save_file: str = None, metrics: list = None):
@@ -43,6 +82,10 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
         A ``pandas.DataFrame`` when ``return_format="dataframe"``, otherwise
         a ``dict`` matching the requested format.
     """
+    # Strip surrounding whitespace from the token (matches api._get_token).
+    token = (token or "").strip() if isinstance(token, str) else token
+    metrics = _coerce_metrics(metrics)
+
     # Hit the GitHub API and get back a tidy DataFrame (one row per day per repo)
     df = fetch_traffic_data(token, repo_name, metrics)
 
@@ -54,13 +97,14 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
     if return_format == "dataframe":
         if save_file:
             if save_file.endswith(".json"):
-                # Save as a chart-ready JSON file
+                # Save as a chart-ready JSON file (always public-only when exported to disk)
                 payload = build_json_payload(df, return_format="timeseries", export_public_only=True)
-                with open(save_file, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=2)
+                _write_json_safely(save_file, payload)
             else:
                 # Save as a standard CSV file
-                df.to_csv(save_file, index=False)
+                p = Path(save_file)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                df.to_csv(p, index=False)
         return df
 
     # Reject anything that isn't a known format before doing more work
@@ -71,13 +115,14 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
             f"Choose one of: 'dataframe', 'timeseries', 'summary'."
         )
 
-    # Build the JSON-serialisable payload in the requested shape
-    payload = build_json_payload(df, return_format=return_format, export_public_only=False)
+    # Build the JSON-serialisable payload in the requested shape.
+    # When persisting to disk, strip private repos by default (security firewall).
+    export_public_only = bool(save_file)
+    payload = build_json_payload(df, return_format=return_format, export_public_only=export_public_only)
 
     # Save to disk if the user gave us a file path
     if save_file:
-        with open(save_file, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+        _write_json_safely(save_file, payload)
 
     return payload
 
@@ -98,10 +143,12 @@ def sync(token: str, repo_name=None, data_dir: str = "./data", output_mode: str 
             exported JSON — acts as a security firewall.
         metrics: Optional list of metrics to fetch (e.g., ``["views", "clones"]``).
     """
-    if data_dir and not os.path.isabs(data_dir) and not os.path.exists(data_dir):
-        parent_dir = os.path.join("..", data_dir)
-        if os.path.exists(parent_dir):
-            data_dir = parent_dir
+    # Strip the token. Resolve the data_dir to an absolute path but NEVER redirect
+    # to a sibling directory — respect the user's CWD.
+    token = (token or "").strip() if isinstance(token, str) else token
+    metrics = _coerce_metrics(metrics)
+    if data_dir:
+        data_dir = str(Path(data_dir).expanduser().resolve())
 
     # Hand off to the automation engine — it handles deduplication and schema migration
     run_sync(
@@ -145,17 +192,13 @@ def serve_dashboard(host: str = "127.0.0.1", port: int = 8000, token: str = None
     _orig_data_dir = os.environ.get("GITLYTICS_DATA_DIR")
     try:
         if token:
-            os.environ["GITLYTICS_TOKEN"] = token
+            os.environ["GITLYTICS_TOKEN"] = (token or "").strip()
         if data_dir:
-            from pathlib import Path
-            abs_data_dir = os.path.abspath(data_dir)
-            if not os.path.exists(abs_data_dir) and not os.path.isabs(data_dir):
-                parent_dir = os.path.abspath(os.path.join("..", data_dir))
-                if os.path.exists(parent_dir):
-                    abs_data_dir = parent_dir
-            if not os.path.exists(abs_data_dir):
+            abs_data_dir = str(Path(data_dir).expanduser().resolve())
+            p = Path(abs_data_dir)
+            if not p.exists():
                 print(f"⚠️ Warning: The specified data directory '{data_dir}' (resolved to '{abs_data_dir}') does not exist.")
-            elif not any(Path(abs_data_dir).glob("traffic_*.csv")):
+            elif not any(p.glob("traffic_*.csv")):
                 print(f"⚠️ Warning: No traffic_*.csv database files found in '{data_dir}' (resolved to '{abs_data_dir}').")
             os.environ["GITLYTICS_DATA_DIR"] = abs_data_dir
         uvicorn.run("gitlytics.api:app", host=host, port=port, reload=False)

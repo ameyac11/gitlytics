@@ -1,7 +1,6 @@
 # Copyright (c) 2026 Ameya Sanjay Chopade
-# SPDX-License-Identifier: LicenseRef-Apache-2.0-Commons-Clause
-# Licensed under Apache-2.0 with the Commons Clause restriction.
-# Selling, hosting, or offering this Software as a paid service is prohibited.
+# SPDX-License-Identifier: Apache-2.0
+# Licensed under Apache-2.0.
 # See LICENSE.md for full terms.
 """
 gitlytics/core.py
@@ -9,6 +8,7 @@ Handles fetching traffic and deep metadata from the GitHub API.
 """
 import json
 import logging
+
 import requests
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,18 +17,22 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger(__name__)
 
 BASE = "https://api.github.com"
-_PUBLIC_HEADERS = {
+# Single source of truth for the GitHub media-type + API version headers.
+_GITHUB_BASE_HEADERS = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+_PUBLIC_HEADERS = dict(_GITHUB_BASE_HEADERS)
+_MAX_RELEASE_PAGES = 10      # hard cap when walking /releases
+_MAX_PR_PAGES = 10           # hard cap when walking /pulls
+_PER_PAGE = 100              # request size for paginated endpoints
 
 
 def make_headers(token: str) -> dict:
     # Auth headers for authenticated API calls
     return {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
+        **_GITHUB_BASE_HEADERS,
     }
 
 
@@ -93,10 +97,13 @@ def get_public_user(username: str) -> dict:
             }
         if r.status_code == 404:
             raise ValueError(f"User '{username}' not found.")
+        # 5xx and other unexpected codes — log a warning and return a stub so the
+        # caller (the API endpoint) can return a 502 without leaking the failure.
         logger.warning(f"Failed to fetch user {username}: HTTP {r.status_code}")
+    except ValueError:
+        # Re-raise user-not-found as-is.
+        raise
     except Exception as exc:
-        if isinstance(exc, ValueError):
-            raise
         logger.warning(f"Could not fetch public user profile: {exc}")
     return {"login": username, "name": username, "avatar_url": ""}
 
@@ -121,7 +128,7 @@ def _normalise_repo(repo: dict) -> dict:
     }
 
 
-def _fetch_public_repos_by_updated(username: str, per_page: int = 50) -> list:
+def _fetch_public_repos_by_updated(username: str, per_page: int) -> list:
     # Call 1 of 2: most-recently-updated repos (catches active new projects)
     try:
         r = requests.get(
@@ -139,7 +146,7 @@ def _fetch_public_repos_by_updated(username: str, per_page: int = 50) -> list:
         return []
 
 
-def _fetch_public_repos_by_stars(username: str, per_page: int = 50) -> list:
+def _fetch_public_repos_by_stars(username: str, per_page: int) -> list:
     # Call 2 of 2: top-starred repos via Search API (catches famous older projects)
     try:
         r = requests.get(
@@ -166,8 +173,10 @@ def get_public_repos(username: str, max_repos: int = 50) -> list:
       2. Most starred via Search API (catches famous older projects)
     The two lists are merged, deduplicated, sorted by stars, and capped at max_repos.
     """
-    recent = _fetch_public_repos_by_updated(username, per_page=50)
-    starred = _fetch_public_repos_by_stars(username, per_page=50)
+    # Don't request more than the caller actually wants.
+    per_page = min(50, max_repos) if max_repos > 0 else 50
+    recent = _fetch_public_repos_by_updated(username, per_page=per_page)
+    starred = _fetch_public_repos_by_stars(username, per_page=per_page)
 
     seen: set = set()
     merged = []
@@ -187,10 +196,12 @@ def _safe_get(url: str, headers: dict, params: dict = None) -> tuple:
         r = requests.get(url, headers=headers, params=params, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            # GitHub occasionally returns 200 with a soft-error body (M-6)
-            if isinstance(data, dict) and data.get("message") in ("Not Found", "Bad credentials"):
+            # GitHub occasionally returns 200 with a soft-error body. Any dict that
+            # contains a "message" field is treated as a soft error (caller decides
+            # what to do with status 200 + empty body).
+            if isinstance(data, dict) and data.get("message"):
                 logger.warning(f"GitHub soft-error for {url}: {data['message']}")
-                return {}, 404
+                return {}, r.status_code
             return data, 200
         if r.status_code == 429:
             logger.warning(f"GitHub API rate limit hit (429) for {url}.")
@@ -205,6 +216,27 @@ def _safe_get(url: str, headers: dict, params: dict = None) -> tuple:
     except Exception as exc:
         logger.warning(f"Request failed for {url}: {exc}")
         return {}, -1
+
+
+def _walk_paginated_count(url: str, headers: dict, params: dict, max_pages: int) -> int:
+    """
+    Count items across pages. Returns the total count, capped at max_pages * per_page.
+    The GitHub REST API for /pulls and /releases does not return a total_count,
+    so we have to walk pages.
+    """
+    total = 0
+    per_page = int(params.get("per_page", _PER_PAGE)) if params else _PER_PAGE
+    page_params = dict(params or {})
+    page_params["per_page"] = per_page
+    for page in range(1, max_pages + 1):
+        page_params["page"] = page
+        data, status = _safe_get(url, headers, page_params)
+        if status != 200 or not isinstance(data, list) or not data:
+            break
+        total += len(data)
+        if len(data) < per_page:
+            break
+    return total
 
 
 def get_deep_repo_stats(token: str, full_name: str) -> dict:
@@ -230,18 +262,10 @@ def get_deep_repo_stats(token: str, full_name: str) -> dict:
     if isinstance(ca_data, list):
         stats["total_commits"] = sum(week.get("total", 0) for week in ca_data)
 
-    # Open PRs — read the Link header to get the real total count (M-4)
+    # Open PRs — walk pages because GitHub's /pulls endpoint doesn't return a total.
     pr_url = f"{BASE}/repos/{full_name}/pulls"
     try:
-        pr_resp = requests.get(pr_url, headers=h, params={"state": "open", "per_page": 1}, timeout=10)
-        if pr_resp.status_code == 200:
-            link = pr_resp.headers.get("Link", "")
-            if 'rel="last"' in link:
-                import re as _re
-                m = _re.search(r'page=(\d+)>; rel="last"', link)
-                stats["open_prs"] = int(m.group(1)) if m else len(pr_resp.json())
-            else:
-                stats["open_prs"] = len(pr_resp.json())
+        stats["open_prs"] = _walk_paginated_count(pr_url, h, {"state": "open"}, _MAX_PR_PAGES)
     except Exception as exc:
         logger.warning(f"Could not fetch open PRs for {full_name}: {exc}")
 
@@ -254,32 +278,17 @@ def get_deep_repo_stats(token: str, full_name: str) -> dict:
         stats["has_contributing"] = bool(files.get("contributing"))
         stats["has_code_of_conduct"] = bool(files.get("code_of_conduct"))
 
-    # Releases — count real total using Link header pagination, then get latest date
+    # Releases — walk pages to get the real total, then read the latest's date from
+    # the first page (GitHub returns releases sorted newest-first, so page=1 has it).
     try:
-        rel_resp = requests.get(
-            f"{BASE}/repos/{full_name}/releases",
-            headers=h,
-            params={"per_page": 1},
-            timeout=10,
-        )
-        if rel_resp.status_code == 200:
-            link = rel_resp.headers.get("Link", "")
-            if 'rel="last"' in link:
-                import re as _re
-                m = _re.search(r'page=(\d+)>; rel="last"', link)
-                stats["total_releases"] = int(m.group(1)) if m else 1
-            else:
-                # Only one page — count items in this page
-                items = rel_resp.json()
-                stats["total_releases"] = len(items) if isinstance(items, list) else 0
-            # Fetch the latest release separately for its date
-            latest_resp = requests.get(
-                f"{BASE}/repos/{full_name}/releases/latest",
-                headers=h,
-                timeout=10,
+        rel_url = f"{BASE}/repos/{full_name}/releases"
+        first_page, status = _safe_get(rel_url, h, {"per_page": _PER_PAGE, "page": 1})
+        if status == 200 and isinstance(first_page, list):
+            stats["total_releases"] = _walk_paginated_count(
+                rel_url, h, {"per_page": _PER_PAGE}, _MAX_RELEASE_PAGES
             )
-            if latest_resp.status_code == 200:
-                latest = latest_resp.json()
+            if first_page:
+                latest = first_page[0]
                 stats["last_release_at"] = latest.get("published_at") or latest.get("created_at")
     except Exception as exc:
         logger.warning(f"Could not fetch releases for {full_name}: {exc}")
@@ -297,8 +306,10 @@ def fetch_deep_stats_for_top(token: str, repos_with_views: list, top_n: int = 20
     def fetch_one(full_name: str):
         return full_name, get_deep_repo_stats(token, full_name)
 
-    # 10 workers keeps us well inside GitHub's abuse rate limit
-    with ThreadPoolExecutor(max_workers=10) as pool:
+    # 5 workers keeps us well inside GitHub's abuse rate limit. The default
+    # `get_deep_repo_stats` issues 3 requests per repo (commit activity, PRs,
+    # releases) plus a community profile — so 5 workers = 20 concurrent calls.
+    with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {pool.submit(fetch_one, r["repository"]): r["repository"] for r in top}
         for future in as_completed(futures):
             try:
@@ -316,7 +327,7 @@ def get_all_repos(token: str) -> list[dict]:
     repos, page = [], 1
     seen = set()
     while True:
-        data, _ = _safe_get(f"{BASE}/user/repos", headers, {"per_page": 100, "page": page, "type": "all"})
+        data, _ = _safe_get(f"{BASE}/user/repos", headers, {"per_page": _PER_PAGE, "page": page, "type": "all"})
         # L-2: check isinstance before truthiness to avoid dict falsy short-circuit
         if not isinstance(data, list) or len(data) == 0:
             break
@@ -325,7 +336,8 @@ def get_all_repos(token: str) -> list[dict]:
             if fname and fname not in seen:
                 seen.add(fname)
                 repos.append(repo)
-        if len(data) < 100:
+        # Stop when the page is short — this is the natural end of pagination.
+        if len(data) < _PER_PAGE:
             break
         page += 1
     return repos
@@ -346,7 +358,7 @@ def get_single_repo(token: str, full_name: str) -> dict:
 def get_repo_traffic(token: str, full_name: str, metrics: list = None) -> dict:
     # Fetch only the traffic endpoints requested in metrics
     h = make_headers(token)
-    
+
     views, clones, refs, paths = {}, {}, [], []
     if metrics is None or "views" in metrics:
         views, _ = _safe_get(f"{BASE}/repos/{full_name}/traffic/views", h)
@@ -367,36 +379,42 @@ def get_repo_traffic(token: str, full_name: str, metrics: list = None) -> dict:
 
 def pad_traffic_data(traffic: dict) -> list[dict]:
     # GitHub only returns days with activity — fill gaps with zeros
-    views_list = traffic.get("views", {}).get("views", [])
-    clones_list = traffic.get("clones", {}).get("clones", [])
+    views_list = traffic.get("views", {}).get("views", []) or []
+    clones_list = traffic.get("clones", {}).get("clones", []) or []
 
     latest_date_str = None
     for item in views_list + clones_list:
-        date_str = item.get("timestamp", "")[:10]  # L-1: guard missing key
+        ts = item.get("timestamp", "")
+        date_str = ts[:10] if isinstance(ts, str) else ""
         if not date_str:
             continue
         if latest_date_str is None or date_str > latest_date_str:
             latest_date_str = date_str
 
     if latest_date_str:
-        end_date = datetime.strptime(latest_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        try:
+            end_date = datetime.strptime(latest_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            logger.warning(f"Could not parse traffic date {latest_date_str!r}; falling back to today.")
+            end_date = datetime.now(timezone.utc)
     else:
         end_date = datetime.now(timezone.utc)
 
     dates = [(end_date - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
-    views_map = {v["timestamp"][:10]: v for v in views_list}
-    clones_map = {c["timestamp"][:10]: c for c in clones_list}
+    # Guard against rows missing a timestamp (rare but possible on partial responses).
+    views_map = {v.get("timestamp", "")[:10]: v for v in views_list if isinstance(v, dict) and v.get("timestamp")}
+    clones_map = {c.get("timestamp", "")[:10]: c for c in clones_list if isinstance(c, dict) and c.get("timestamp")}
 
     padded = []
     for d in dates:
-        v = views_map.get(d, {})
-        c = clones_map.get(d, {})
+        v = views_map.get(d, {}) or {}
+        c = clones_map.get(d, {}) or {}
         padded.append({
             "date": d,
-            "views": v.get("count", 0),
-            "unique_visitors": v.get("uniques", 0),
-            "clones": c.get("count", 0),
-            "unique_cloners": c.get("uniques", 0)
+            "views": int(v.get("count", 0) or 0),
+            "unique_visitors": int(v.get("uniques", 0) or 0),
+            "clones": int(c.get("count", 0) or 0),
+            "unique_cloners": int(c.get("uniques", 0) or 0)
         })
     return padded
 
@@ -431,7 +449,7 @@ def build_tidy_rows(repo: dict, traffic: dict, metrics: list = None) -> list[dic
             row["stars"] = repo.get("stargazers_count", 0)
         if metrics is None or "forks" in metrics:
             row["forks"] = repo.get("forks_count", 0)
-            
+
         # Repo metadata that the deep dashboard needs
         if metrics is None or "language" in metrics:
             row["language"] = repo.get("language")
@@ -445,13 +463,13 @@ def build_tidy_rows(repo: dict, traffic: dict, metrics: list = None) -> list[dic
             row["created_at"] = repo.get("created_at", "")
         if metrics is None or "open_issues_count" in metrics:
             row["open_issues_count"] = repo.get("open_issues_count", 0)
-            
+
         if metrics is None or "referrers" in metrics:
             row["top_referrer"] = top_ref
             row["top_referrer_views"] = top_ref_views
             row["top_referrer_uniques"] = top_ref_uniques
             row["_raw_referrers"] = json.dumps(refs)
-            
+
         if metrics is None or "paths" in metrics:
             row["top_path"] = top_path
             row["top_path_views"] = top_path_views
@@ -464,9 +482,13 @@ def build_tidy_rows(repo: dict, traffic: dict, metrics: list = None) -> list[dic
 
 def fetch_traffic_data(token: str, repo_names=None, metrics: list = None) -> pd.DataFrame:
     # Decide whether to fetch one repo, a custom list, or all repos
-    if repo_names:
+    if repo_names is not None:
         if isinstance(repo_names, str):
             repo_names = [repo_names]
+        # Treat an explicit empty list as "fetch nothing" rather than falling through
+        # to get_all_repos (which would fetch every accessible repo).
+        if len(repo_names) == 0:
+            return pd.DataFrame()
         repos = [get_single_repo(token, name) for name in repo_names]
     else:
         repos = get_all_repos(token)
@@ -484,8 +506,16 @@ def print_repo_table(df: pd.DataFrame):
         print("No data to display.")
         return
 
-    repo_width = max(30, df["repository"].str.len().max() + 2)
-    header = f"{'REPOSITORY':<{repo_width}} {'VIEWS':<8} {'U.VIEWS':<8} {'CLONES':<8} {'U.CLONES':<8} {'STARS':<8} {'FORKS':<8} {'TOP REFERRER':<15}"
+    # Replace NaN with empty string for clean printing (no literal "nan").
+    safe_df = df.fillna("")
+
+    repo_width = max(30, safe_df["repository"].astype(str).str.len().max() + 2)
+    ref_width = max(15, safe_df["top_referrer"].astype(str).str.len().max() + 2) if "top_referrer" in safe_df.columns else 15
+    header = (
+        f"{'REPOSITORY':<{repo_width}} "
+        f"{'VIEWS':<8} {'U.VIEWS':<8} {'CLONES':<8} {'U.CLONES':<8} "
+        f"{'STARS':<8} {'FORKS':<8} {'TOP REFERRER':<{ref_width}}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -493,21 +523,25 @@ def print_repo_table(df: pd.DataFrame):
     total_account_uniques = 0
     total_account_clones = 0
 
-    for repo in df["repository"].unique():
-        repo_df = df[df["repository"] == repo]
-        views = repo_df["views"].sum()
-        u_views = repo_df["unique_visitors"].sum()
-        clones = repo_df["clones"].sum()
-        u_clones = repo_df["unique_cloners"].sum()
-        stars = repo_df.iloc[-1]["stars"]
-        forks = repo_df.iloc[-1]["forks"]
-        top_ref = repo_df.iloc[-1]["top_referrer"]
+    for repo in safe_df["repository"].unique():
+        repo_df = safe_df[safe_df["repository"] == repo]
+        views = int(repo_df["views"].sum()) if "views" in repo_df.columns else 0
+        u_views = int(repo_df["unique_visitors"].sum()) if "unique_visitors" in repo_df.columns else 0
+        clones = int(repo_df["clones"].sum()) if "clones" in repo_df.columns else 0
+        u_clones = int(repo_df["unique_cloners"].sum()) if "unique_cloners" in repo_df.columns else 0
+        stars = repo_df.iloc[-1]["stars"] if "stars" in repo_df.columns else 0
+        forks = repo_df.iloc[-1]["forks"] if "forks" in repo_df.columns else 0
+        top_ref = repo_df.iloc[-1].get("top_referrer", "") if "top_referrer" in repo_df.columns else ""
 
         total_account_views += views
         total_account_uniques += u_views
         total_account_clones += clones
 
-        print(f"{repo:<{repo_width}} {views:<8} {u_views:<8} {clones:<8} {u_clones:<8} {stars:<8} {forks:<8} {top_ref:<15}")
+        print(
+            f"{repo:<{repo_width}} "
+            f"{views:<8} {u_views:<8} {clones:<8} {u_clones:<8} "
+            f"{stars:<8} {forks:<8} {str(top_ref):<{ref_width}}"
+        )
 
     print("-" * len(header))
     print(f"Total Account Views:  {total_account_views} (Unique: {total_account_uniques})")

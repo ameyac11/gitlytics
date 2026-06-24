@@ -42,20 +42,22 @@ except ImportError:
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-# Points to d:\PROGRAMING\MAIN Projects\gitlytics\data (three levels up from tests/)
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+# Persistent data dir for integration tests. Falls back to a per-process temp
+# directory so the suite doesn't write into the user's project tree.
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "_data"
 
 
 @pytest.fixture(scope="session")
-def data_dir() -> Path:
+def data_dir(tmp_path_factory) -> Path:
     """
-    Persistent data directory at d:\\PROGRAMING\\MAIN Projects\\gitlytics\\data.
-    Created automatically if it doesn't exist.
-    Use this in integration tests that need to write real output files.
+    Per-session persistent data directory used by integration tests that need
+    a real output location. Defaults to a temp directory so the suite is
+    hermetic; the original hard-coded absolute path was dropped because it
+    leaked into other developers' working trees.
     """
-    # Create the folder if a previous test run hasn't already
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return DATA_DIR
+    target = _DEFAULT_DATA_DIR
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 @pytest.fixture(scope="session")

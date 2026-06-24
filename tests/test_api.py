@@ -345,3 +345,56 @@ class TestRootEndpoint:
         # API routes must NOT be swallowed by the SPA catch-all
         response = client.get("/api/config")
         assert response.status_code == 200  # always returns JSON, not HTML
+
+    def test_unknown_api_path_returns_404_not_html(self):
+        # Bug fix: a /api/* path that doesn't match any route must return 404, not the SPA index
+        response = client.get("/api/this-endpoint-does-not-exist")
+        assert response.status_code == 404
+        # Make sure we got JSON, not the HTML SPA shell
+        assert "text/html" not in response.headers.get("content-type", "")
+
+
+# ── CORS allowlist (v0.2.1 fix) ──────────────────────────────────────────────
+
+class TestCorsHeaders:
+    def test_authorization_header_is_allowed(self):
+        # Bug fix: 'Authorization' must be in CORS allow_headers for the dashboard
+        # to send the token via header in cross-origin deployments.
+        from gitlytics.api import app as api_app
+        from fastapi.middleware.cors import CORSMiddleware
+        cors_mw = next((m for m in api_app.user_middleware if m.cls is CORSMiddleware), None)
+        assert cors_mw is not None, "CORS middleware is not registered"
+        kwargs = cors_mw.kwargs
+        assert "Authorization" in kwargs.get("allow_headers", []), (
+            "CORS allow_headers must include 'Authorization'"
+        )
+        # Vite dev port (5173) is intentionally NOT in the allowlist (v0.2.1 fix).
+        assert "http://localhost:5173" not in kwargs.get("allow_origins", [])
+
+
+# ── /api/upload-csv oversize guard (v0.2.1 fix) ──────────────────────────────
+
+class TestUploadSizeLimit:
+    def test_oversize_upload_returns_413(self, tmp_path):
+        # Bug fix: an upload larger than 25 MB must return 413, not consume memory
+        from gitlytics.api import _MAX_UPLOAD_BYTES
+        # Build a body that's just over the limit (1 byte extra)
+        body = b"x" * (_MAX_UPLOAD_BYTES + 1)
+        # Set GITLYTICS_DATA_DIR so the streaming path (with size check) runs
+        with patch.dict(
+            "os.environ", {"GITLYTICS_DATA_DIR": str(tmp_path)}, clear=False
+        ):
+            response = client.post(
+                "/api/upload-csv",
+                files={"file": ("huge.csv", body, "text/csv")},
+            )
+        assert response.status_code == 413
+
+    def test_under_limit_upload_proceeds(self):
+        # A small upload must NOT trigger 413
+        body = b"date,repository,views\n2025-06-14,u/r,10\n"
+        response = client.post(
+            "/api/upload-csv",
+            files={"file": ("ok.csv", body, "text/csv")},
+        )
+        assert response.status_code in (200, 400)  # 400 only if column recognition fails

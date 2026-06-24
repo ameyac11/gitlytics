@@ -74,7 +74,14 @@ def export_json_database(data_dir: str, export_path: str, export_public_only: bo
     export_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(export_file, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+
+
+def _normalize_field(name: str) -> str:
+    # Strip BOM, lower-case, and trim so older CSVs match the new schema.
+    if not isinstance(name, str):
+        return ""
+    return name.lstrip("﻿").strip().lower()
 
 
 def _merge_schema(existing_fields: list, new_fields: list) -> list:
@@ -83,18 +90,30 @@ def _merge_schema(existing_fields: list, new_fields: list) -> list:
     Existing fields keep their original order; new fields are appended at the end
     so historical rows stay compatible with the updated schema.
     """
-    merged = list(existing_fields)
+    # Normalize on the fly so 'Date' and 'date' are treated identically.
+    norm_existing = [_normalize_field(f) for f in existing_fields]
+    merged_norm = list(norm_existing)
+    original_for_norm = list(existing_fields)
     for col in new_fields:
-        if col not in merged:
+        n = _normalize_field(col)
+        if n and n not in merged_norm:
             # A new column appeared in the API response — add it so it gets saved
             logger.info(f"Schema upgrade: adding new column '{col}' to existing CSV.")
-            merged.append(col)
-    return merged
+            merged_norm.append(n)
+            original_for_norm.append(col)
+    # Return the original-cased names where possible so the CSV header stays human-readable.
+    return original_for_norm
 
 
 def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="monthly", export_json=None, export_public_only=True, metrics: list = None):
     # Fetch fresh traffic data from GitHub
     df = fetch_traffic_data(token, repo_names, metrics)
+
+    # Always regenerate the export if requested, even when fresh data is empty,
+    # so the export file never becomes silently stale.
+    if export_json:
+        export_json_database(data_dir, export_json, export_public_only)
+
     if df.empty:
         logger.info("No traffic data found to sync.")
         return
@@ -108,18 +127,19 @@ def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="
 
     if file_exists:
         # Read the existing column headers so we can migrate the schema if needed
-        with open(csv_path, "r", encoding="utf-8") as f:
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
             reader = csv.reader(f)
             try:
                 existing_fields = next(reader)
             except StopIteration:
                 pass
 
-        # Load all existing rows into a dict keyed by (repo, date) for deduplication
+        # Load all existing rows in one pass — avoid iterrows() on large files.
         try:
             existing_df = pd.read_csv(csv_path)
-            for _, row in existing_df.iterrows():
-                existing_data[(str(row["repository"]), str(row["date"]))] = row.to_dict()
+            for record in existing_df.to_dict("records"):
+                key = (str(record.get("repository", "")), str(record.get("date", "")))
+                existing_data[key] = record
         except Exception as exc:
             logger.warning(f"Could not read existing CSV '{csv_path}': {exc}. Starting fresh.")
 
@@ -132,24 +152,32 @@ def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="
 
     # Merge fresh data into existing rows — preserves columns not present in this sync run
     new_records_added = 0
-    for _, row in df.iterrows():
-        key = (str(row["repository"]), str(row["date"]))
+    for record in df.to_dict("records"):
+        key = (str(record.get("repository", "")), str(record.get("date", "")))
         if key not in existing_data:
             new_records_added += 1
-            existing_data[key] = row.to_dict()
+            existing_data[key] = record
         else:
-            existing_data[key].update(row.to_dict())
+            existing_data[key].update(record)
 
     # Sort all rows by date and repo name before writing back to disk
     final_rows = []
     for v in existing_data.values():
         # Fill any missing schema columns with empty strings for old rows
-        clean_row = {k: v.get(k, "") for k in existing_fields}
+        clean_row = {}
+        for k in existing_fields:
+            nk = _normalize_field(k)
+            if nk in v:
+                clean_row[k] = v[nk]
+            else:
+                # Try to match by normalized name to old-style keys in the dict.
+                match = next((orig for orig in v.keys() if _normalize_field(orig) == nk), None)
+                clean_row[k] = v[match] if match is not None else ""
         final_rows.append(clean_row)
 
-    final_rows.sort(key=lambda x: (x.get("date", ""), x.get("repository", "")))
+    final_rows.sort(key=lambda x: (str(x.get("date", "")), str(x.get("repository", ""))))
 
-    # Write everything back to the CSV file atomically
+    # Write everything back to the CSV file
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=existing_fields, extrasaction='ignore')
         writer.writeheader()
@@ -157,10 +185,15 @@ def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="
 
     logger.info(f"Successfully processed traffic data. Added {new_records_added} new daily records to {csv_path}")
 
-    # If the user wants a JSON export, regenerate it from the full database
-    if export_json:
-        export_json_database(data_dir, export_json, export_public_only)
-        logger.info(f"Exported historical database to {export_json}")
+
+def _interruptible_sleep(total_seconds: float) -> None:
+    # Sleep in short chunks so SIGINT/SIGTERM (Ctrl-C, docker stop) is responsive.
+    chunk = 1.0
+    elapsed = 0.0
+    while elapsed < total_seconds:
+        remaining = total_seconds - elapsed
+        time.sleep(min(chunk, remaining))
+        elapsed += chunk
 
 
 def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthly", schedule_cron=None, export_json=None, export_public_only=True, metrics: list = None):
@@ -173,7 +206,7 @@ def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthl
     # Parse the cron expression — fail early if the format is wrong
     try:
         croniter(schedule_cron, datetime.now(timezone.utc))  # validate only
-    except ValueError as e:
+    except (ValueError, KeyError, TypeError) as e:
         logger.error(f"Invalid cron expression: {e}")
         return
 
@@ -190,21 +223,25 @@ def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthl
 
         sleep_secs = (next_run - now_utc).total_seconds()
 
-        # Sleep until the next scheduled run
-        if sleep_secs > 0:
-            logger.info(f"Scheduled next sync for {next_run.strftime('%Y-%m-%d %H:%M:%S UTC')}. Sleeping...")
-            time.sleep(sleep_secs)
+        # Guard against negative/zero sleep (clock skew): minimum 1s to avoid hot-looping.
+        if sleep_secs <= 0:
+            sleep_secs = 1.0
+
+        logger.info(f"Scheduled next sync for {next_run.strftime('%Y-%m-%d %H:%M:%S UTC')}. Sleeping {sleep_secs:.0f}s...")
+        _interruptible_sleep(sleep_secs)
 
         try:
             # Always re-validate the token before fetching to catch expiry early
             is_valid, msg = validate_token(token)
             if not is_valid:
                 # Distinguish between a dead token (stop forever) and a network blip (retry next cycle)
+                msg_lower = msg.lower()
                 is_auth_failure = (
                     "401" in msg
-                    or "authentication failed" in msg.lower()
-                    or "invalid token" in msg.lower()
-                    or "revoked" in msg.lower()
+                    or "authentication failed" in msg_lower
+                    or "invalid token" in msg_lower
+                    or "revoked" in msg_lower
+                    or "bad credentials" in msg_lower
                 )
                 if is_auth_failure:
                     logger.critical(
@@ -217,6 +254,11 @@ def run_sync(token: str, repo_names=None, data_dir="./data", output_mode="monthl
                     continue
 
             run_sync_cycle(token, repo_names, data_dir, output_mode, export_json, export_public_only, metrics)
+        except SystemExit:
+            raise
+        except KeyboardInterrupt:
+            logger.info("Daemon interrupted by user. Exiting.")
+            raise
         except Exception as e:
             # Don't let a single bad cycle kill the daemon — just log and carry on
             logger.error(f"Daemon encountered unexpected error: {e}. Recovering for next cycle.")
