@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gitlytics"
-version = "0.4.5"
+version = "0.4.6"
 description = "Monitor and automate your GitHub repository traffic analytics."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,6 +19,7 @@ authors = [
 dependencies = [
     "requests>=2.32.0",
     "pandas>=2.2.0",
+    "numpy>=1.26.0",
     "croniter>=2.0.0"
 ]
 keywords = [

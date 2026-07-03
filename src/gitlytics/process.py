@@ -135,6 +135,18 @@ def build_json_payload(df: pd.DataFrame, return_format: str = "timeseries", expo
     }
 
 
+_LEGACY_COLUMN_MAP = {
+    "repository": "repository",
+    "repo_name": "repository",
+    "total views": "views",
+    "unique visitors": "unique_visitors",
+    "total clones": "clones",
+    "unique cloners": "unique_cloners",
+    "stars": "stars",
+    "forks": "forks",
+}
+
+
 def process_uploaded_csv(uploaded_file) -> pd.DataFrame:
     """Reads a user-uploaded CSV and normalises column names to match our tidy schema."""
     raw_df = pd.read_csv(uploaded_file)
@@ -146,12 +158,19 @@ def process_uploaded_csv(uploaded_file) -> pd.DataFrame:
     rename_lower = {c: c.lower() for c in raw_df.columns}
     raw_df = raw_df.rename(columns=rename_lower)
 
+    # Map legacy display names (e.g. "Total Views", "Unique Visitors") to the
+    # canonical schema columns that build_react_payload / build_json_payload expect.
+    # Without this, multi-word legacy headers like "total views" stay as-is after
+    # lower-casing and downstream code silently returns 0 for those metrics.
+    legacy_rename = {}
+    for legacy, canonical in _LEGACY_COLUMN_MAP.items():
+        if legacy in raw_df.columns and canonical not in raw_df.columns:
+            legacy_rename[legacy] = canonical
+    if legacy_rename:
+        raw_df = raw_df.rename(columns=legacy_rename)
+
     if "repository" not in raw_df.columns:
-        # Last-resort fallback: accept the legacy "Repository" + "Total Views" etc.
-        if "repo_name" in raw_df.columns:
-            raw_df = raw_df.rename(columns={"repo_name": "repository"})
-        else:
-            raise ValueError("Invalid CSV format: missing 'repository' column")
+        raise ValueError("Invalid CSV format: missing 'repository' column")
 
     if "date" not in raw_df.columns:
         raise ValueError("Invalid CSV format: missing required 'date' column")

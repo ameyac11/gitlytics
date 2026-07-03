@@ -292,6 +292,22 @@ class TestProcessUploadedCsv:
         })
         result = process_uploaded_csv(csv_file)
         assert "repository" in result.columns
+        # Multi-word legacy columns must be mapped to the canonical names
+        # that build_react_payload expects — otherwise views/clones silently
+        # default to 0 in the dashboard.
+        assert "views" in result.columns
+        assert "unique_visitors" in result.columns
+        assert "clones" in result.columns
+        assert "unique_cloners" in result.columns
+        assert "stars" in result.columns
+        assert "forks" in result.columns
+        # Verify data values are preserved through the rename
+        assert result["views"].iloc[0] == 10
+        assert result["unique_visitors"].iloc[0] == 4
+        assert result["clones"].iloc[0] == 3
+        assert result["unique_cloners"].iloc[0] == 1
+        assert result["stars"].iloc[0] == 20
+        assert result["forks"].iloc[0] == 5
 
     def test_missing_repository_column_raises_value_error(self):
         # A CSV with no recognisable repository column must raise a clear error

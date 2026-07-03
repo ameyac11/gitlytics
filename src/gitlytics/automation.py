@@ -112,7 +112,7 @@ def _write_df_to_csv(df: pd.DataFrame, csv_path: str) -> int:
     existing_data = {}
 
     if file_exists:
-        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+        with open(csv_path, "r", encoding="utf-8", newline="") as f:
             reader = csv.reader(f)
             try:
                 existing_fields = next(reader)
@@ -181,6 +181,16 @@ def run_sync_cycle(token: str, repo_names=None, data_dir="./data", output_mode="
     if output_mode == "monthly" and "date" in df.columns:
         # Group rows by their actual data month so June data never lands in a July file.
         df["_month"] = pd.to_datetime(df["date"], errors="coerce").dt.strftime("%Y-%m")
+        # Warn about rows with unparseable dates — groupby(dropna=True) drops NaN keys
+        # silently, which can cause data loss without any logging.
+        bad_mask = df["_month"].isna()
+        bad_count = bad_mask.sum()
+        if bad_count:
+            logger.warning(
+                "Dropping %d row(s) with unparseable date values (set to NaT). "
+                "Check your data for malformed dates.", bad_count
+            )
+        df = df[~bad_mask]
         for month_key, group in df.groupby("_month"):
             group = group.drop(columns=["_month"])
             try:

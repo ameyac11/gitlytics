@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 
 __all__ = [
     "fetch_traffic",
@@ -110,15 +110,19 @@ def fetch_traffic(token: str, repo_name=None, print_table: bool = False, return_
     # --- dataframe mode: just return the raw DataFrame, optionally save it ---
     if return_format == "dataframe":
         if save_file:
+            # When persisting to disk, strip private repos by default (security firewall).
+            export_df = df
+            if "is_private" in df.columns:
+                export_df = df[~df["is_private"]]
             if save_file.endswith(".json"):
                 # Save as a chart-ready JSON file (always public-only when exported to disk)
-                payload = build_json_payload(df, return_format="timeseries", export_public_only=True)
+                payload = build_json_payload(export_df, return_format="timeseries", export_public_only=True)
                 _write_json_safely(save_file, payload)
             else:
                 # Save as a standard CSV file
                 p = Path(save_file)
                 p.parent.mkdir(parents=True, exist_ok=True)
-                df.to_csv(p, index=False)
+                export_df.to_csv(p, index=False)
         return df
 
     # Reject anything that isn't a known format before doing more work

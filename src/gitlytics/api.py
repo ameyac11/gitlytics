@@ -2,6 +2,8 @@
 gitlytics/api.py
 Powers the FastAPI backend — serves traffic data and the React dashboard to the browser.
 """
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
@@ -288,10 +290,17 @@ def get_star_history_endpoint(
     response: Response,
     authorization: str | None = Header(default=None),
 ):
-    bearer = ""
-    if authorization and authorization.lower().startswith("bearer "):
-        bearer = authorization.split(" ", 1)[1].strip()
-    token = bearer or os.environ.get("GITLYTICS_TOKEN")
+    # If an Authorization header is present but malformed (wrong scheme, empty
+    # token, etc.), error out rather than silently falling back to the server's
+    # own GITLYTICS_TOKEN — anyone who can reach this endpoint must not be able
+    # to burn the operator's PAT quota with a spoofed header.
+    if authorization:
+        parts = authorization.strip().split(None, 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+            raise HTTPException(status_code=401, detail="Malformed Authorization header.")
+        token = parts[1].strip()
+    else:
+        token = os.environ.get("GITLYTICS_TOKEN")
     try:
         points = fetch_star_history(owner, repo, token)
     except GitHubRateLimitError as exc:
@@ -343,7 +352,30 @@ def upload_csv(
                         )
                     out.write(chunk)
             file.file.seek(0)
-        df = process_uploaded_csv(file.file)
+            upload_stream = file.file
+        else:
+            # No data_dir configured — the common case for `gitlytics dashboard`
+            # without persistence. The 25 MB cap MUST still be enforced here,
+            # otherwise an unbounded upload is fully buffered into memory before
+            # pd.read_csv runs (DoS / OOM). Read into a bounded BytesIO so the
+            # size check happens before any parsing.
+            import io
+            buf = io.BytesIO()
+            total = 0
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"CSV too large. Maximum size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                    )
+                buf.write(chunk)
+            buf.seek(0)
+            upload_stream = buf
+        df = process_uploaded_csv(upload_stream)
         df = df.replace([float('inf'), float('-inf')], None).where(pd.notnull(df), None)
         payload = build_react_payload(df, deep_stats=None)
         return payload
@@ -356,6 +388,9 @@ def upload_csv(
 
 # Static file serving
 frontend_dir = Path(__file__).parent / "static"
+assets_dir = frontend_dir / "assets"
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
 
 @app.get("/")
@@ -395,7 +430,3 @@ def serve_spa_fallback(full_path: str):
 
     return JSONResponse(status_code=404, content={"error": "Not found."})
 
-
-assets_dir = frontend_dir / "assets"
-if assets_dir.exists():
-    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")

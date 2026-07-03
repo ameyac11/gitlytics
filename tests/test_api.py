@@ -415,6 +415,23 @@ class TestUploadSizeLimit:
             )
         assert response.status_code == 413
 
+    def test_oversize_upload_returns_413_without_data_dir(self, tmp_path):
+        # Bug fix: the 25 MB cap must be enforced even when GITLYTICS_DATA_DIR is
+        # not set (the default/common configuration). The original fix only enforced
+        # the limit inside the `if data_dir:` branch.
+        from gitlytics.api import _MAX_UPLOAD_BYTES
+        body = b"x" * (_MAX_UPLOAD_BYTES + 1)
+        # Ensure no data dir is set so the unbounded read path is exercised
+        with patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("GITLYTICS_DATA_DIR", None)
+            os.environ.pop("GITLYTICS_TOKEN", None)
+            response = client.post(
+                "/api/upload-csv",
+                files={"file": ("huge.csv", body, "text/csv")},
+            )
+        assert response.status_code == 413
+
     def test_under_limit_upload_proceeds(self):
         # A small upload must NOT trigger 413
         body = b"date,repository,views\n2025-06-14,u/r,10\n"

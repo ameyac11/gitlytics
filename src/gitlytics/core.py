@@ -6,6 +6,8 @@
 gitlytics/core.py
 Handles fetching traffic and deep metadata from the GitHub API.
 """
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -184,13 +186,13 @@ def _fetch_public_repos_by_stars(username: str, per_page: int) -> list:
 
 
 def get_public_repos(username: str, max_repos: int = 50) -> list:
-    username = validate_github_username(username)
     """
     Fetches up to max_repos best public repos for a username using two calls:
       1. Most recently updated (catches active projects)
       2. Most starred via Search API (catches famous older projects)
     The two lists are merged, deduplicated, sorted by stars, and capped at max_repos.
     """
+    username = validate_github_username(username)
     # Don't request more than the caller actually wants.
     per_page = min(50, max_repos) if max_repos > 0 else 50
     recent = _fetch_public_repos_by_updated(username, per_page=per_page)
@@ -679,9 +681,17 @@ def fetch_traffic_data(token: str, repo_names=None, metrics: list = None) -> pd.
         # to get_all_repos (which would fetch every accessible repo).
         if len(repo_names) == 0:
             return pd.DataFrame()
-        repos = [get_single_repo(token, name) for name in repo_names]
+        repos = []
+        for name in repo_names:
+            try:
+                repos.append(get_single_repo(token, name))
+            except ValueError as exc:
+                logger.warning("Skipping unknown repo '%s': %s", name, exc)
     else:
         repos = get_all_repos(token)
+
+    if not repos:
+        return pd.DataFrame()
 
     all_rows = []
     for repo in repos:
