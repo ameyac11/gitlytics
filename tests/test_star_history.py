@@ -88,15 +88,16 @@ class TestFetchStarHistorySmallRepo:
     @patch("gitlytics.core.requests.get")
     def test_small_repo_walks_per_star(self, mock_get):
         # 5-star repo: 5 stargazers to walk. Use the small_per_page of 30 so
-        # all 5 land in a single page-1 response.
+        # all 5 land in a single page-1 response. GitHub returns stargazers
+        # in REVERSE chronological order, so the page lists newest first.
         meta = _meta_response(5, status=200)
         page = _stargazer_page(
             [
-                "2024-01-01T00:00:00Z",
-                "2024-01-02T00:00:00Z",
-                "2024-01-03T00:00:00Z",
-                "2024-01-04T00:00:00Z",
-                "2024-01-05T00:00:00Z",
+                "2024-01-05T00:00:00Z",  # items[0] = newest = star #5
+                "2024-01-04T00:00:00Z",  # star #4
+                "2024-01-03T00:00:00Z",  # star #3
+                "2024-01-02T00:00:00Z",  # star #2
+                "2024-01-01T00:00:00Z",  # items[4] = oldest = star #1
             ]
         )
         # Side effects: first call returns metadata, second returns the stargazer page.
@@ -109,8 +110,46 @@ class TestFetchStarHistorySmallRepo:
         # Cumulative totals must never decrease across dates.
         totals = [p["total"] for p in points]
         assert totals == sorted(totals)
+        # All 5 star dates must appear in the timeline. (Today may also
+        # appear as a trailing point, which is expected — the chart's
+        # right edge is always today.)
+        dates = {p["date"] for p in points}
+        assert {
+            "2024-01-01",
+            "2024-01-02",
+            "2024-01-03",
+            "2024-01-04",
+            "2024-01-05",
+        }.issubset(dates), f"Expected all 5 star dates, got {dates}"
         # Network: metadata + 1 stargazer page.
         assert mock_get.call_count == 2
+
+    @patch("gitlytics.core.requests.get")
+    def test_small_repo_position_maps_newest_to_highest(self, mock_get):
+        # With the bug, the code labeled items[0] as position=1 (the oldest).
+        # After the fix, items[0] should be the highest cumulative position
+        # (the newest star). The timeline must end at the live count with
+        # the newest date carrying the highest star number.
+        meta = _meta_response(3, status=200)
+        # Newest first: items[0] is the latest star, items[-1] is the earliest.
+        page = _stargazer_page(
+            [
+                "2024-06-01T00:00:00Z",  # newest
+                "2024-05-01T00:00:00Z",
+                "2024-04-01T00:00:00Z",  # oldest
+            ]
+        )
+        mock_get.side_effect = [meta, page]
+        points = fetch_star_history("owner", "repo")
+        # The newest date (2024-06-01) should carry the highest cumulative
+        # total for that date. (Today may also be appended at the end with
+        # the live count of 3, but it must not be lower than 2024-06-01.)
+        by_date = {p["date"]: p["total"] for p in points}
+        assert by_date["2024-04-01"] < by_date["2024-05-01"] < by_date["2024-06-01"]
+        # 2024-06-01 (the newest) carries position 3, the live total.
+        assert by_date["2024-06-01"] == 3
+        # 2024-04-01 (the oldest) carries position 1.
+        assert by_date["2024-04-01"] == 1
 
 
 class TestFetchStarHistoryLargeRepo:
@@ -118,18 +157,80 @@ class TestFetchStarHistoryLargeRepo:
 
     @patch("gitlytics.core.requests.get")
     def test_large_repo_samples_ten_pages(self, mock_get):
-        # 5000-star repo: should pick 10 evenly-spaced positions across the first
-        # 422 pages (GitHub's pagination ceiling).
+        # 5000-star repo: 50 pages of stargazers. The function should pick
+        # 10 evenly-spaced pages across the 50-page range, including the
+        # first and last. Each page returns 100 items with a distinct
+        # `starred_at` (oldest item in the page = oldest star of that page).
         meta = _meta_response(5000, status=200)
-        # Each sampled page returns 100 items with starred_at timestamps.
-        star_date = "2020-06-15T00:00:00Z"
-        page = _stargazer_page([star_date] * 100)
+        # Build 10 distinct page responses. Each page's LAST item carries
+        # the date of the oldest star in that page.
+        page_dates = [f"2020-{i+1:02d}-15T00:00:00Z" for i in range(10)]
+        pages = [
+            _stargazer_page([page_dates[i]] * 100) for i in range(10)
+        ]
         # 1 metadata call + 10 page calls.
-        mock_get.side_effect = [meta] + [page] * 10
+        mock_get.side_effect = [meta] + pages
         points = fetch_star_history("owner", "repo")
         # The total must monotonically increase to today's 5000.
         assert points[-1]["total"] == 5000
+        # Timeline must span multiple distinct dates (not collapse to one).
+        dates = {p["date"] for p in points}
+        assert len(dates) >= 5, f"Expected >=5 distinct dates, got {len(dates)}: {dates}"
         # Network calls: metadata + 10 stargazer pages.
+        assert mock_get.call_count == 11
+
+    @patch("gitlytics.core.requests.get")
+    def test_large_repo_uses_last_item_per_page(self, mock_get):
+        # Lock in the fix: the LAST item in each page is the oldest star
+        # in that page, and that is what the chart should sample. If the
+        # code reverts to using the first item (newest), this test fails.
+        meta = _meta_response(5000, status=200)
+        # Build 10 page responses. Each page has 100 items where the LAST
+        # item is much older than the first. The sampled date should be
+        # the LAST item's date (the oldest in the page).
+        page_dates = [
+            "2024-01-15T00:00:00Z",  # page 1, oldest in page = star #4900
+            "2023-01-15T00:00:00Z",  # page 6
+            "2022-01-15T00:00:00Z",  # page 11
+            "2021-01-15T00:00:00Z",  # page 16
+            "2020-01-15T00:00:00Z",  # page 21
+            "2019-01-15T00:00:00Z",  # page 26
+            "2018-01-15T00:00:00Z",  # page 31 — distinctive date
+            "2017-01-15T00:00:00Z",  # page 36
+            "2016-01-15T00:00:00Z",  # page 41
+            "2015-01-15T00:00:00Z",  # page 46
+        ]
+        pages = [
+            _stargazer_page(["2024-06-15T00:00:00Z"] * 99 + [page_dates[i]])
+            for i in range(10)
+        ]
+        # 1 metadata call + 10 page calls.
+        mock_get.side_effect = [meta] + pages
+        points = fetch_star_history("owner", "repo")
+        # All 10 distinct oldest-page-item dates must appear in the timeline.
+        dates = {p["date"] for p in points}
+        for d in page_dates:
+            assert d[:10] in dates, f"Expected {d[:10]} in timeline, got {dates}"
+
+    @patch("gitlytics.core.requests.get")
+    def test_large_repo_pages_capped_at_422(self, mock_get):
+        # 200,000-star repo: would need 2000 pages, but we cap at 422.
+        # Only 10 page requests should be made, and none may reference
+        # a page number greater than 422.
+        meta = _meta_response(200_000, status=200)
+        page = _stargazer_page(["2020-06-15T00:00:00Z"] * 100)
+        mock_get.side_effect = [meta] + [page] * 10
+        fetch_star_history("owner", "repo")
+        # Inspect every stargazer page request and verify page <= 422.
+        for call in mock_get.call_args_list:
+            args, kwargs = call
+            url = args[0] if args else kwargs.get("url", "")
+            params = kwargs.get("params", {})
+            if "/stargazers" in url:
+                assert int(params.get("page", 1)) <= 422, (
+                    f"Page number {params.get('page')} exceeds 422 cap"
+                )
+        # Metadata + 10 pages = 11 calls total.
         assert mock_get.call_count == 11
 
     @patch("gitlytics.core.requests.get")

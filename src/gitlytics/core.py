@@ -428,6 +428,10 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
     if total_stars <= 0:
         return [{"date": today_str, "total": 0}]
 
+    # GitHub's stargazers endpoint returns results in REVERSE chronological
+    # order — items[0] is the most recent stargazer, items[-1] is the oldest
+    # of the page. The cumulative star position of items[offset] on page p
+    # is therefore: total_stars - (p - 1) * per_page - offset.
     headers = _star_headers(token)
     per_page = _PER_PAGE
     points: list[dict] = []
@@ -438,14 +442,8 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
     if total_stars <= SMALL_THRESHOLD:
         # Walk every page at smaller page size for finer granularity.
         small_per_page = 30
-        positions = list(range(1, total_stars + 1))
-        # Use the small page size for these requests.
-        per_page = small_per_page
-        small_by_page: dict[int, list[int]] = {}
-        for pos in positions:
-            p = (pos - 1) // small_per_page + 1
-            small_by_page.setdefault(p, []).append(pos)
-        for p, poses in small_by_page.items():
+        total_pages = (total_stars + small_per_page - 1) // small_per_page
+        for p in range(1, total_pages + 1):
             try:
                 r = requests.get(
                     f"{BASE}/repos/{owner}/{repo}/stargazers",
@@ -464,35 +462,37 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
             items = r.json()
             if not isinstance(items, list):
                 continue
-            for pos in poses:
-                offset = (pos - 1) % small_per_page
-                if offset >= len(items):
-                    continue
+            for offset in range(len(items)):
                 item = items[offset]
                 if not isinstance(item, dict):
                     continue
                 starred_at = item.get("starred_at")
                 if not starred_at:
                     continue
-                points.append({"date": str(starred_at)[:10], "total": pos})
+                # GitHub returns newest-first; map the index back to the
+                # star's chronological position in the cumulative count.
+                star_position = total_stars - (p - 1) * small_per_page - offset
+                if star_position < 1:
+                    continue
+                points.append({"date": str(starred_at)[:10], "total": star_position})
     else:
-        # Pick 10 evenly-spaced individual stars. GitHub only keeps the last
-        # ~420 pages of stargazers even for huge repos so we cap the page
-        # range to avoid 422s on the upper bound.
+        # Pick 10 evenly-spaced pages across the available page range. GitHub
+        # only keeps the last ~420 pages of stargazers even for huge repos so
+        # we cap at 422 to avoid 422s on the upper bound. For each sampled
+        # page, take the LAST item (oldest star in that page) so the 10
+        # samples spread across the repo's full lifetime rather than
+        # clustering on the most recent stars.
         max_pages = 422
-        max_position = min(total_stars, max_pages * per_page)
+        total_pages = min((total_stars + per_page - 1) // per_page, max_pages)
         sample_count = 10
-        if max_position == 1:
-            sampled = [1]
+        if total_pages <= sample_count:
+            sampled_pages = list(range(1, total_pages + 1))
         else:
-            step = (max_position - 1) / (sample_count - 1)
-            sampled = sorted({max(1, min(max_position, round(1 + i * step))) for i in range(sample_count)})
-        # Group positions by page so each page is requested at most once.
-        by_page: dict[int, list[int]] = {}
-        for pos in sampled:
-            p = (pos - 1) // per_page + 1
-            by_page.setdefault(p, []).append(pos)
-        for p, poses in by_page.items():
+            sampled_pages = sorted({
+                1 + round(i * (total_pages - 1) / (sample_count - 1))
+                for i in range(sample_count)
+            })
+        for p in sampled_pages:
             try:
                 r = requests.get(
                     f"{BASE}/repos/{owner}/{repo}/stargazers",
@@ -509,19 +509,22 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
                 logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
                 continue
             items = r.json()
-            if not isinstance(items, list):
+            if not isinstance(items, list) or not items:
                 continue
-            for pos in poses:
-                offset = (pos - 1) % per_page
-                if offset >= len(items):
-                    continue
-                item = items[offset]
-                if not isinstance(item, dict):
-                    continue
-                starred_at = item.get("starred_at")
-                if not starred_at:
-                    continue
-                points.append({"date": str(starred_at)[:10], "total": pos})
+            # Take the LAST (oldest) item in this page. The cumulative
+            # position of items[-1] on page p is: total_stars - (p-1)*per_page
+            # minus however many items are in this page, plus 1.
+            last = items[-1]
+            if not isinstance(last, dict):
+                continue
+            starred_at = last.get("starred_at")
+            if not starred_at:
+                continue
+            offset = len(items) - 1
+            star_position = total_stars - (p - 1) * per_page - offset
+            if star_position < 1:
+                continue
+            points.append({"date": str(starred_at)[:10], "total": star_position})
 
     # Build a per-day cumulative timeline. Each entry means "by end of <date>,
     # this repo had <total> stars". Today always equals the live stargazers
