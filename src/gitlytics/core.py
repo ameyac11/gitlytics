@@ -38,6 +38,15 @@ class StarHistoryFetchError(Exception):
     """Raised for non-rate-limit star-history failures (network, parse, validation)."""
 
 
+class StargazersRestrictedError(Exception):
+    """Raised when GitHub returns 404/403 on the /stargazers endpoint.
+
+    As of June 30, 2026, GitHub restricted this endpoint to repository
+    admins and collaborators only. It is distinct from a repo-not-found
+    404 which is raised earlier via StarHistoryFetchError.
+    """
+
+
 def make_headers(token: str) -> dict:
     # Auth headers for authenticated API calls
     # GitHub Classic PATs require the `token` prefix, not `Bearer`.
@@ -456,6 +465,11 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
                 continue
             if r.status_code in (403, 429):
                 raise GitHubRateLimitError("GitHub rate limit reached, try again later")
+            if r.status_code == 404:
+                raise StargazersRestrictedError(
+                    "GitHub restricted the stargazers endpoint as of June 30, 2026. "
+                    "Star history is only available for repositories you own or collaborate on."
+                )
             if r.status_code != 200:
                 logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
                 continue
@@ -469,9 +483,9 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
                 starred_at = item.get("starred_at")
                 if not starred_at:
                     continue
-                # GitHub returns newest-first; map the index back to the
+                # GitHub returns oldest-first; map the index to the
                 # star's chronological position in the cumulative count.
-                star_position = total_stars - (p - 1) * small_per_page - offset
+                star_position = (p - 1) * small_per_page + offset + 1
                 if star_position < 1:
                     continue
                 points.append({"date": str(starred_at)[:10], "total": star_position})
@@ -505,15 +519,19 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
                 continue
             if r.status_code in (403, 429):
                 raise GitHubRateLimitError("GitHub rate limit reached, try again later")
+            if r.status_code == 404:
+                raise StargazersRestrictedError(
+                    "GitHub restricted the stargazers endpoint as of June 30, 2026. "
+                    "Star history is only available for repositories you own or collaborate on."
+                )
             if r.status_code != 200:
                 logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
                 continue
             items = r.json()
             if not isinstance(items, list) or not items:
                 continue
-            # Take the LAST (oldest) item in this page. The cumulative
-            # position of items[-1] on page p is: total_stars - (p-1)*per_page
-            # minus however many items are in this page, plus 1.
+            # Take the LAST (newest) item in this page. The cumulative
+            # position of items[-1] on page p is: (p - 1) * per_page + offset + 1.
             last = items[-1]
             if not isinstance(last, dict):
                 continue
@@ -521,7 +539,7 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
             if not starred_at:
                 continue
             offset = len(items) - 1
-            star_position = total_stars - (p - 1) * per_page - offset
+            star_position = (p - 1) * per_page + offset + 1
             if star_position < 1:
                 continue
             points.append({"date": str(starred_at)[:10], "total": star_position})

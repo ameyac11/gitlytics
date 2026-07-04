@@ -89,15 +89,15 @@ class TestFetchStarHistorySmallRepo:
     def test_small_repo_walks_per_star(self, mock_get):
         # 5-star repo: 5 stargazers to walk. Use the small_per_page of 30 so
         # all 5 land in a single page-1 response. GitHub returns stargazers
-        # in REVERSE chronological order, so the page lists newest first.
+        # in CHRONOLOGICAL order, so the page lists oldest first.
         meta = _meta_response(5, status=200)
         page = _stargazer_page(
             [
-                "2024-01-05T00:00:00Z",  # items[0] = newest = star #5
-                "2024-01-04T00:00:00Z",  # star #4
-                "2024-01-03T00:00:00Z",  # star #3
+                "2024-01-01T00:00:00Z",  # items[0] = oldest = star #1
                 "2024-01-02T00:00:00Z",  # star #2
-                "2024-01-01T00:00:00Z",  # items[4] = oldest = star #1
+                "2024-01-03T00:00:00Z",  # star #3
+                "2024-01-04T00:00:00Z",  # star #4
+                "2024-01-05T00:00:00Z",  # items[4] = newest = star #5
             ]
         )
         # Side effects: first call returns metadata, second returns the stargazer page.
@@ -126,17 +126,17 @@ class TestFetchStarHistorySmallRepo:
 
     @patch("gitlytics.core.requests.get")
     def test_small_repo_position_maps_newest_to_highest(self, mock_get):
-        # With the bug, the code labeled items[0] as position=1 (the oldest).
-        # After the fix, items[0] should be the highest cumulative position
-        # (the newest star). The timeline must end at the live count with
+        # GitHub returns stargazers oldest first.
+        # items[0] is the earliest star, items[-1] is the latest.
+        # The timeline must end at the live count with
         # the newest date carrying the highest star number.
         meta = _meta_response(3, status=200)
-        # Newest first: items[0] is the latest star, items[-1] is the earliest.
+        # Oldest first: items[0] is the earliest star, items[-1] is the latest.
         page = _stargazer_page(
             [
-                "2024-06-01T00:00:00Z",  # newest
-                "2024-05-01T00:00:00Z",
                 "2024-04-01T00:00:00Z",  # oldest
+                "2024-05-01T00:00:00Z",
+                "2024-06-01T00:00:00Z",  # newest
             ]
         )
         mock_get.side_effect = [meta, page]
@@ -189,19 +189,19 @@ class TestFetchStarHistoryLargeRepo:
         # item is much older than the first. The sampled date should be
         # the LAST item's date (the oldest in the page).
         page_dates = [
-            "2024-01-15T00:00:00Z",  # page 1, oldest in page = star #4900
-            "2023-01-15T00:00:00Z",  # page 6
-            "2022-01-15T00:00:00Z",  # page 11
-            "2021-01-15T00:00:00Z",  # page 16
-            "2020-01-15T00:00:00Z",  # page 21
-            "2019-01-15T00:00:00Z",  # page 26
-            "2018-01-15T00:00:00Z",  # page 31 — distinctive date
-            "2017-01-15T00:00:00Z",  # page 36
-            "2016-01-15T00:00:00Z",  # page 41
-            "2015-01-15T00:00:00Z",  # page 46
+            "2015-01-15T00:00:00Z",  # page 1, oldest = star #100
+            "2016-01-15T00:00:00Z",  # page 6
+            "2017-01-15T00:00:00Z",  # page 11
+            "2018-01-15T00:00:00Z",  # page 16
+            "2019-01-15T00:00:00Z",  # page 21
+            "2020-01-15T00:00:00Z",  # page 26
+            "2021-01-15T00:00:00Z",  # page 31 — distinctive date
+            "2022-01-15T00:00:00Z",  # page 36
+            "2023-01-15T00:00:00Z",  # page 41
+            "2024-01-15T00:00:00Z",  # page 46, newest = star #4600
         ]
         pages = [
-            _stargazer_page(["2024-06-15T00:00:00Z"] * 99 + [page_dates[i]])
+            _stargazer_page(["2000-01-01T00:00:00Z"] * 99 + [page_dates[i]])
             for i in range(10)
         ]
         # 1 metadata call + 10 page calls.

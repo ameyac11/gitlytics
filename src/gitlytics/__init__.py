@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.4.8"
+__version__ = "0.5.0"
 
 __all__ = [
     "fetch_traffic",
@@ -19,6 +19,7 @@ __all__ = [
     "__version__",
     "GitHubRateLimitError",
     "StarHistoryFetchError",
+    "StargazersRestrictedError",
 ]
 
 # Import the internal building blocks — users never call these directly
@@ -28,6 +29,7 @@ from .core import (
     print_repo_table,
     GitHubRateLimitError,
     StarHistoryFetchError,
+    StargazersRestrictedError,
 )
 from .automation import run_sync
 from .process import build_json_payload
