@@ -1,0 +1,21 @@
+# Gitlytics Dashboard
+
+> The client dashboard for Gitlytics, an open-source GitHub Traffic Analytics platform. It visualizes repository views, clones, stars, forks, and referrers beyond GitHub's default 14-day retention limit.
+
+## Key Resources
+
+- [Homepage](https://gitlytics.dev) : The main website for the Gitlytics project.
+- [Documentation](https://docs.gitlytics.dev) : Guides, API documentation, and CLI references.
+- [Cloud Dashboard](https://dashboard.gitlytics.dev) : The hosted SaaS platform.
+- [GitHub Repository](https://github.com/ameyac11/gitlytics) : The main codebase containing core Python library, API backend, and dashboard package.
+- [Automation Repository](https://github.com/ameyac11/gitlytics-github-traffic-automation) : The automated traffic backup composite action.
+- [Full LLMs Context](https://dashboard.gitlytics.dev/llms-full.txt) : Plain-text context for LLM ingestion.
+
+## Dashboard Capabilities
+
+- **Metrics Grid**: Displays accumulated views, uniques, clones, and stars, calculating week-over-week changes.
+- **Traffic Visualizations**: Interactive top-N charts, cumulative growth timelines, and weekday heatmaps.
+- **Leaderboards**: Displays clones and views comparison with visual badges.
+- **Star History**: Lifetime sampled star history with 1Y / All time filters.
+- **Referrer Logs**: Domain categorization and click timeline tracking.
+- **Reporting**: Export reports directly to PNG, multi-page PDF, or raw CSV formats.

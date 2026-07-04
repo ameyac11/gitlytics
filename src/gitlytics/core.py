@@ -40,8 +40,9 @@ class StarHistoryFetchError(Exception):
 
 def make_headers(token: str) -> dict:
     # Auth headers for authenticated API calls
+    # GitHub Classic PATs require the `token` prefix, not `Bearer`.
     return {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"token {token}",
         **_GITHUB_BASE_HEADERS,
     }
 
@@ -394,12 +395,13 @@ def _star_headers(token: str | None) -> dict:
     # so each item carries `starred_at`. Token is optional for public reads.
     # Merge order matters: star+json must land AFTER the base headers so it
     # overrides the default Accept (otherwise GitHub returns bare user objects).
+    # GitHub Classic PATs require the `token` prefix, not `Bearer`.
     h = {
         **_GITHUB_BASE_HEADERS,
         "Accept": "application/vnd.github.star+json",
     }
     if token:
-        h["Authorization"] = f"Bearer {token}"
+        h["Authorization"] = f"token {token}"
     return h
 
 
