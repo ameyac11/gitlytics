@@ -1,21 +1,19 @@
-# Gitlytics Dashboard
+# Gitlytics Ecosytem
 
-> The client dashboard for Gitlytics, an open-source GitHub Traffic Analytics platform. It visualizes repository views, clones, stars, forks, and referrers beyond GitHub's default 14-day retention limit.
+> Gitlytics is an open-source GitHub analytics and customization platform providing persistent traffic tracking, interactive charts, SVG badges, custom technology logos, and premium developer profile cards.
 
 ## Key Resources
 
-- [Homepage](https://gitlytics.dev) : The main website for the Gitlytics project.
-- [Documentation](https://docs.gitlytics.dev) : Guides, API documentation, and CLI references.
-- [Cloud Dashboard](https://dashboard.gitlytics.dev) : The hosted SaaS platform.
-- [GitHub Repository](https://github.com/ameyac11/gitlytics) : The main codebase containing core Python library, API backend, and dashboard package.
-- [Automation Repository](https://github.com/ameyac11/gitlytics-github-traffic-automation) : The automated traffic backup composite action.
-- [Full LLMs Context](https://dashboard.gitlytics.dev/llms-full.txt) : Plain-text context for LLM ingestion.
+- [Homepage](https://gitlytics.dev) : Main marketing site with features, architecture, and live examples.
+- [Documentation](https://docs.gitlytics.dev) : Setup guides, CLI reference, and API documentation.
+- [Cloud Dashboard](https://dashboard.gitlytics.dev) : Hosted SaaS platform with automated backups and team management.
+- [GitHub Core Repository](https://github.com/ameyac11/gitlytics) : Core library, REST API backend, CLI, and local dashboard server.
+- [Traffic Sync Automation Repository](https://github.com/ameyac11/gitlytics-github-traffic-automation) : Composite GitHub Action to persist repository metrics beyond the 14-day limit.
+- [Full LLMs Context](https://gitlytics.dev/llms-full.txt) : Complete plain-text documentation for LLM ingestion.
 
-## Dashboard Capabilities
+## System Components
 
-- **Metrics Grid**: Displays accumulated views, uniques, clones, and stars, calculating week-over-week changes.
-- **Traffic Visualizations**: Interactive top-N charts, cumulative growth timelines, and weekday heatmaps.
-- **Leaderboards**: Displays clones and views comparison with visual badges.
-- **Star History**: Lifetime sampled star history with 1Y / All time filters.
-- **Referrer Logs**: Domain categorization and click timeline tracking.
-- **Reporting**: Export reports directly to PNG, multi-page PDF, or raw CSV formats.
+1. **Core CLI & Python Library** : Fetch, deduplicate, and sync traffic data to monthly/yearly CSV files.
+2. **REST API Backend** : FastAPI server handling OAuth authentication, nightly database sync, and dynamic SVG widget generation.
+3. **React Frontend** : Interactive dashboard visualizing views, referrers, clones, star growth, tech logo generation, and custom profile details.
+4. **Traffic Sync GitHub Action** : Composite action executing every 13 days to automatically pull and commit traffic data back to the repo.

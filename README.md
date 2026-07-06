@@ -5,15 +5,15 @@
 # Gitlytics
 ### GitHub Traffic Analytics & Automation 
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![PyPI](https://img.shields.io/pypi/v/gitlytics?color=blue)](https://pypi.org/project/gitlytics/)
-[![React](https://img.shields.io/badge/UI-React-61dafb?logo=react)](https://react.dev/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Automation](https://img.shields.io/badge/Data%20Backup-Automation%20Tool-purple?logo=github-actions)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
-[![Homepage](https://img.shields.io/badge/Homepage-gitlytics.dev-success)](https://gitlytics.dev)
-[![Live](https://img.shields.io/badge/Live%20Demo-dashboard.gitlytics.dev-success)](https://dashboard.gitlytics.dev)
-[![Docs](https://img.shields.io/badge/Docs-docs.gitlytics.dev-success)](https://docs.gitlytics.dev)
+[![License](https://api.gitlytics.dev/api/badge/static.svg?label=License&message=Apache+2.0&color=blue)](LICENSE)
+[![Python](https://api.gitlytics.dev/api/badge/static.svg?label=Python&message=3.9%2B&color=blue&logo=python)](https://www.python.org/)
+[![PyPI](https://api.gitlytics.dev/api/badge/pypi/gitlytics.svg)](https://pypi.org/project/gitlytics/)
+[![React](https://api.gitlytics.dev/api/badge/static.svg?label=UI&message=React&color=61dafb&logo=react)](https://react.dev/)
+[![FastAPI](https://api.gitlytics.dev/api/badge/static.svg?label=Backend&message=FastAPI&color=009688&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Automation](https://api.gitlytics.dev/api/badge/static.svg?label=Data+Backup&message=Automation+Tool&color=purple)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
+[![Homepage](https://api.gitlytics.dev/api/badge/static.svg?label=Homepage&message=gitlytics.dev&color=success)](https://gitlytics.dev)
+[![Live](https://api.gitlytics.dev/api/badge/static.svg?label=Live+Demo&message=dashboard.gitlytics.dev&color=success)](https://dashboard.gitlytics.dev)
+[![Docs](https://api.gitlytics.dev/api/badge/static.svg?label=Docs&message=docs.gitlytics.dev&color=success)](https://docs.gitlytics.dev)
 
 <br/>Please consider giving this project a ⭐ if you find it helpful! <br/>
 
@@ -22,13 +22,75 @@
 ✨ **[Try the live dashboard at dashboard.gitlytics.dev](https://dashboard.gitlytics.dev)** ✨  
 📚 **[Read the documentation at docs.gitlytics.dev](https://docs.gitlytics.dev)**
 
-<br/>
+</div>
 
-> **🐍 Native Python API**
-> 
-> You can import Gitlytics natively into your own Python applications to fetch live repository data like views, clones, stars, and referrers. Build custom integrations, run custom cron workflows, or serve the dashboard programmatically on your own cloud servers.
-> 
-> 📚 **[Read the Full API Documentation](https://docs.gitlytics.dev)**
+---
+
+## 🎨 Interactive Profile Widgets & Badges (Live Demo)
+
+Elevate your GitHub profile README and developer portfolios with Gitlytics' native, dynamic widget rendering suite. Serve real-time stats cards, commit-level language breakdowns, concept tags, and social badges.
+
+### 📇 Profile & Repository Cards
+Showcase your global activity or project metrics with gorgeous, theme-customizable cards:
+
+<div align="center">
+  <table border="0">
+    <tr>
+      <td align="center" width="50%">
+        <b>👤 User Profile Details Card</b> (Tokyo Night + Coral Title)<br/>
+        <img src="https://api.gitlytics.dev/api/cards/profile-details/demo.svg?theme=tokyonight&title=ff9e64&text=a9b1d6&accent_secondary=7aa2f7" alt="Profile Details" width="380" />
+      </td>
+      <td align="center" width="50%">
+        <b>📈 Repository Metrics Card</b> (Nord + Dark Steel Slate)<br/>
+        <img src="https://api.gitlytics.dev/api/cards/stats/demo.svg?theme=nord&title=88c0d0&text=d8dee9&bg=2e3440&border=4c566a" alt="Repository Stats" width="380" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <b>📊 Language Distribution Chart</b> (Radical + Pink Accents)<br/>
+        <img src="https://api.gitlytics.dev/api/cards/repos-per-language/demo.svg?theme=radical&title=fe60a1&accent_secondary=a6e22e" alt="Language Distribution" width="380" />
+      </td>
+      <td align="center" width="50%">
+        <b>🔥 Contribution Streak Tracker</b> (Solarized Dark + Olive green)<br/>
+        <img src="https://api.gitlytics.dev/api/cards/contribution-streak/demo.svg?theme=solarized_dark&title=268bd2&text=859900&bg=002b36&hide_border=true" alt="Contribution Streak" width="380" />
+      </td>
+    </tr>
+  </table>
+</div>
+
+### 🏷️ Multi-Source Tech Badges & Concepts
+Generate beautifully styled capsule badges for your tech stack. Support for **200+ technology logos** from official libraries, plus **custom text-only capsule badges** for concepts without brand icons (e.g. AI/ML methods, SRE, RAG):
+
+<div align="center">
+  
+  **🛠️ Languages & Frameworks (Multi-color & Flat Brand Colors)**
+  
+  <img src="https://api.gitlytics.dev/api/logos/python.svg?style=logo_text" alt="Python" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/typescript.svg?style=logo_text" alt="TypeScript" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/react.svg?style=logo_text" alt="React" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/fastapi.svg?style=logo_text" alt="FastAPI" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/docker.svg?style=logo_text" alt="Docker" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/aws.svg?style=logo_text" alt="AWS" />
+  
+  <br/><br/>
+  
+  **🧠 AI/ML & Engineering Concepts (Text-Only Capsules)**
+  
+  <img src="https://api.gitlytics.dev/api/logos/rag.svg" alt="RAG" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/embeddings.svg" alt="Embeddings" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/vectorsearch.svg" alt="Vector Search" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/agenticai.svg" alt="Agentic AI" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/finetuning.svg" alt="Fine-Tuning" />
+  
+  <br/><br/>
+  
+  **🔗 Contact & Platform Connectors**
+  
+  <img src="https://api.gitlytics.dev/api/logos/portfolio.svg" alt="Portfolio" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/linkedin.svg?style=logo_text" alt="LinkedIn" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/gmail.svg?style=logo_text" alt="Gmail" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/github.svg?style=logo_text" alt="GitHub" /> &nbsp;
+  <img src="https://api.gitlytics.dev/api/logos/x.svg?style=logo_text" alt="X" />
 
 </div>
 
@@ -278,7 +340,6 @@ points = gitlytics.fetch_star_history(
 | `token` | `str` | `None` | Optional GitHub Personal Access Token. |
 
 ---
-
 
 ## 📊 CSV Output Columns
 
