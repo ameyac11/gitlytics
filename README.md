@@ -5,15 +5,15 @@
 # Gitlytics
 ### GitHub Traffic Analytics & Automation 
 
-[![License](https://api.gitlytics.dev/api/badge/static.svg?label=License&message=Apache+2.0&color=blue)](LICENSE)
-[![Python](https://api.gitlytics.dev/api/badge/static.svg?label=Python&message=3.9%2B&color=blue&logo=python)](https://www.python.org/)
+[![License](https://api.gitlytics.dev/api/badge/tech.svg?slug=license&style=icon_label_value&label=License&label_color=%23555555&variant=plastic&value=Apache+2.0&value_color=%232F81F7)](LICENSE)
+[![Python](https://api.gitlytics.dev/api/badge/tech.svg?slug=python&style=icon_label_value&label=Python&label_color=%23555555&variant=plastic&value=3.9%2B&value_color=%233776AB)](https://www.python.org/)
 [![PyPI](https://api.gitlytics.dev/api/badge/pypi/gitlytics.svg)](https://pypi.org/project/gitlytics/)
-[![React](https://api.gitlytics.dev/api/badge/static.svg?label=UI&message=React&color=61dafb&logo=react)](https://react.dev/)
-[![FastAPI](https://api.gitlytics.dev/api/badge/static.svg?label=Backend&message=FastAPI&color=009688&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Automation](https://api.gitlytics.dev/api/badge/static.svg?label=Data+Backup&message=Automation+Tool&color=purple)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
-[![Homepage](https://api.gitlytics.dev/api/badge/static.svg?label=Homepage&message=gitlytics.dev&color=success)](https://gitlytics.dev)
-[![Live](https://api.gitlytics.dev/api/badge/static.svg?label=Live+Demo&message=dashboard.gitlytics.dev&color=success)](https://dashboard.gitlytics.dev)
-[![Docs](https://api.gitlytics.dev/api/badge/static.svg?label=Docs&message=docs.gitlytics.dev&color=success)](https://docs.gitlytics.dev)
+[![React](https://api.gitlytics.dev/api/badge/tech.svg?slug=react&style=icon_label_value&label=UI&label_color=%23555555&variant=plastic&value=React&value_color=%2361DAFB)](https://react.dev/)
+[![FastAPI](https://api.gitlytics.dev/api/badge/tech.svg?slug=fastapi&style=icon_label_value&label=Backend&label_color=%23555555&variant=plastic&value=FastAPI&value_color=%23009688)](https://fastapi.tiangolo.com/)
+[![Automation](https://api.gitlytics.dev/api/badge/tech.svg?slug=githubactions&style=icon_label_value&label=Data+Backup&label_color=%23555555&variant=plastic&value=Automation&value_color=%232088FF)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
+[![Homepage](https://api.gitlytics.dev/api/badge/tech.svg?slug=homepage&style=icon_label_value&label=Homepage&label_color=%23555555&variant=plastic&value=gitlytics.dev&value_color=%233FB950)](https://gitlytics.dev)
+[![Live](https://api.gitlytics.dev/api/badge/tech.svg?slug=livedemo&style=icon_label_value&label=Live+Demo&label_color=%23555555&variant=plastic&value=dashboard.gitlytics.dev&value_color=%233FB950)](https://dashboard.gitlytics.dev)
+[![Docs](https://api.gitlytics.dev/api/badge/tech.svg?slug=docs&style=icon_label_value&label=Docs&label_color=%23555555&variant=plastic&value=docs.gitlytics.dev&value_color=%233FB950)](https://docs.gitlytics.dev)
 
 <br/>Please consider giving this project a ⭐ if you find it helpful! <br/>
 
