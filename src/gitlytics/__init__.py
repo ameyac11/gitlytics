@@ -221,7 +221,7 @@ def serve_dashboard(host: str = "127.0.0.1", port: int = 8000, token: str = None
             elif not any(p.glob("traffic_*.csv")):
                 print(f"⚠️ Warning: No traffic_*.csv database files found in '{data_dir}' (resolved to '{abs_data_dir}').")
             os.environ["GITLYTICS_DATA_DIR"] = abs_data_dir
-        uvicorn.run("gitlytics.api:app", host=host, port=port, reload=False)
+        uvicorn.run("gitlytics.api:app", host=host, port=port, reload=False, log_level="warning")
     finally:
         if _orig_token is None:
             os.environ.pop("GITLYTICS_TOKEN", None)

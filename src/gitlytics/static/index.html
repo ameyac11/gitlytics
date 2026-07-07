@@ -10,21 +10,74 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Interactive React dashboard to visualize your historical GitHub repository traffic metrics. Powered by the Gitlytics open-source platform." />
+    <link rel="canonical" href="https://dashboard.gitlytics.dev" />
     <meta property="og:site_name" content="Gitlytics" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Gitlytics Dashboard — Live GitHub Traffic, Views & Clones" />
+    <meta property="og:description" content="Visualize your historical GitHub repository traffic metrics, views, clones, and visitor referrers over time." />
+    <meta property="og:url" content="https://dashboard.gitlytics.dev" />
+    <meta property="og:image" content="https://dashboard.gitlytics.dev/gitlytics-banner.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Gitlytics Dashboard — Live GitHub Traffic, Views & Clones" />
+    <meta name="twitter:description" content="Visualize your historical GitHub repository traffic metrics over time with interactive charts." />
+    <meta name="twitter:image" content="https://dashboard.gitlytics.dev/gitlytics-banner.png" />
     <meta name="theme-color" content="#0b0b0f" />
     <title>Gitlytics Dashboard — Live GitHub Traffic, Views & Clones</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-DJlrh7aF.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D1hM33GO.css">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Gitlytics",
+      "url": "https://dashboard.gitlytics.dev",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "All",
+      "description": "Interactive dashboard visualizing historical GitHub repository traffic metrics, views, clones, and referrers.",
+      "softwareVersion": "0.2.1",
+      "sameAs": [
+        "https://github.com/ameyac11/gitlytics",
+        "https://pypi.org/project/gitlytics/"
+      ],
+      "featureList": [
+        "Historical traffic tracking beyond GitHub's default 14-day history window",
+        "Multi-repository OAuth workspace",
+        "Interactive traffic comparison charts",
+        "Raw data CSV exports",
+        "Offline CSV upload history back-porting",
+        "Dynamic Markdown SVG badges and profile widgets",
+        "Deduplicated historical visitor referrers",
+        "CLI-driven synchronization workflow"
+      ]
+    }
+    </script>
+    <script type="module" crossorigin src="/assets/index-CKvtJz1x.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index--VQuQ1On.css">
   </head>
   <body>
     <div id="root">
       <!-- SEO Fallback Content -->
       <main style="max-width: 800px; margin: 0 auto; padding: 2rem; font-family: sans-serif;">
-        <h1>Gitlytics Dashboard</h1>
-        <p>Interactive React dashboard to visualize your historical GitHub repository traffic metrics. Powered by the Gitlytics open-source platform.</p>
+        <h1>Gitlytics Dashboard — Persist GitHub Metrics Beyond 14 Days</h1>
+        <p>An interactive analytics platform to visualize and persist your historical GitHub repository traffic metrics, views, clones, and visitor referrers over time.</p>
+        
+        <h2>Access Modes</h2>
+        <p>Gitlytics can be accessed using four distinct modes based on your requirements:</p>
+        <ul>
+          <li><strong>GitHub OAuth:</strong> Complete cloud dashboard with automated backups and workspace management.</li>
+          <li><strong>Personal Access Token (PAT):</strong> Direct API integration running securely on your local environment.</li>
+          <li><strong>CSV Upload:</strong> Back-port and upload raw CSV traffic data to preserve history offline.</li>
+          <li><strong>Public Username:</strong> Explore any public GitHub profile metrics without requiring an account or token.</li>
+        </ul>
+
+        <h2>Key Features</h2>
+        <ul>
+          <li>Track and compare historical traffic trends across multiple repositories.</li>
+          <li>Analyze deduplicated visitor referrer domains and cloning statistics.</li>
+          <li>Generate custom SVG markdown badges, star growth graphs, and widgets for your profile.</li>
+          <li>Automate synchronization workflows with the official GitHub Action.</li>
+        </ul>
       </main>
     </div>
   </body>

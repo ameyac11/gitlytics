@@ -71,13 +71,13 @@ jobs:
 
 ---
 
-## 4. REST API Backend & Widgets
+## 4. Dynamic Widgets & Profile Customization
 
-The backend provides several dynamic SVG generator endpoints for profile customizability:
+The platform provides several dynamic SVG generator endpoints for profile customizability:
 
 ### Developer Profile Cards
 Renders beautiful summary stats, commit heatmaps, or contribution streaks.
-- **Pattern**: `https://api.gitlytics.dev/api/cards/{card_type}/{username}.svg`
+- **Pattern**: `/api/cards/{card_type}/{username}.svg`
 - **Supported card types**: `profile-details`, `contribution-streak`, `most-commit-language`, `productive-time`, `repos-per-language`, `stats`
 - **Query parameters**:
   - `theme` : Visual style (e.g. `dracula`, `tokyonight`, `github-dark`)
@@ -91,13 +91,13 @@ Renders beautiful summary stats, commit heatmaps, or contribution streaks.
 
 ### Repository Metric Charts
 Visualizes clones, views, forks, and star history inside READMEs.
-- **Pattern**: `https://api.gitlytics.dev/api/chart/{owner}/{repo}/{metric}.svg`
+- **Pattern**: `/api/chart/{owner}/{repo}/{metric}.svg`
 - **Supported metrics**: `views`, `clones`, `stars`, `forks`
 - **Query parameters**: `color` (hex value), `style` (`line` | `area`), `fill` (fill opacity), `milestones` (labels)
 
 ### Technology Logos
 Generates developer tech stack badges and colored pills.
-- **Pattern**: `https://api.gitlytics.dev/api/logos/{slug}.svg`
+- **Pattern**: `/api/logos/{slug}.svg`
 - **Supported styles**:
   - `logo` : Flat colored SVG tech brand icon
   - `logo_text` : Filled capsule badge containing the icon and uppercase text (shields.io "for-the-badge" style), dynamically adjusting icon/text colors for contrast.

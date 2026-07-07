@@ -9,7 +9,7 @@ import os
 
 # Import the three public functions that power every subcommand
 from gitlytics import fetch_traffic, sync, serve_dashboard
-from gitlytics.core import fetch_star_history
+from gitlytics.core import fetch_star_history, StargazersRestrictedError
 
 
 def parse_repo_names(repo_arg: str):
@@ -83,7 +83,7 @@ def main():
     dash_parser.add_argument("--data-dir", help="Inject historical CSV database.")
 
     # ── STARS subcommand ───────────────────────────────────────────────────────
-    stars_parser = subparsers.add_parser("stars", help="Fetch sampled star history for a repo.")
+    stars_parser = subparsers.add_parser("stars", help="Fetch sampled star history for a repo (Rarely used/Deprecated by GitHub API).")
     stars_parser.add_argument("repo", help="Repository in 'owner/repo' form (e.g. ameyac11/gitlytics).")
     stars_parser.add_argument("-t", "--token", help="GitHub Personal Access Token.")
 
@@ -182,6 +182,9 @@ def main():
             # Bad input — non-zero exit so scripts can branch on it.
             print(f"❌ Error: {exc}")
             sys.exit(2)
+        except StargazersRestrictedError as exc:
+            print(f"❌ Restriction Error: {exc}")
+            sys.exit(1)
         except Exception as exc:
             # Anything else (rate limit, network, etc.) — exit 1 so CI knows it failed.
             print(f"❌ Error: {exc}")

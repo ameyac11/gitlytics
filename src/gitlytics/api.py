@@ -32,6 +32,7 @@ from gitlytics.core import (
     fetch_star_history,
     GitHubRateLimitError,
     StarHistoryFetchError,
+    StargazersRestrictedError,
 )
 from gitlytics.process import process_uploaded_csv, build_react_payload, _to_bool
 
@@ -306,6 +307,8 @@ def get_star_history_endpoint(
     except GitHubRateLimitError as exc:
         # Surface rate-limit hits as 429 so the SPA shows the chart's rate-limit UI.
         raise HTTPException(status_code=429, detail=str(exc))
+    except StargazersRestrictedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except StarHistoryFetchError as exc:
         # Validation / metadata / network failures are caller errors — 400 makes more
         # sense than 429 here so the SPA can distinguish "GitHub is throttling us"
