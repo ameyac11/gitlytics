@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Single source of truth for the package version.
 # Mirrors the version in pyproject.toml — keep them in sync.
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "fetch_traffic",
@@ -42,7 +42,7 @@ logger.addHandler(logging.NullHandler())
 _VALID_METRICS = {
     "views", "clones", "referrers", "paths", "stars", "forks",
     "language", "topics", "watchers_count", "pushed_at",
-    "created_at", "open_issues_count",
+    "created_at", "open_issues_count", "releases",
 }
 
 

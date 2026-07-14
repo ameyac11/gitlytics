@@ -109,5 +109,6 @@ Generates developer tech stack badges and colored pills.
 - Landing Page: https://gitlytics.dev
 - Documentation: https://docs.gitlytics.dev
 - Application: https://dashboard.gitlytics.dev
+- Blog: https://blog.gitlytics.dev (includes "What is Gitlytics?")
 - Main Repo: https://github.com/ameyac11/gitlytics
 - Action Repo: https://github.com/ameyac11/gitlytics-github-traffic-automation

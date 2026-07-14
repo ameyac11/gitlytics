@@ -575,6 +575,7 @@ def get_repo_traffic(token: str, full_name: str, metrics: list = None) -> dict:
     h = make_headers(token)
 
     views, clones, refs, paths = {}, {}, [], []
+    releases_count = 0
     if metrics is None or "views" in metrics:
         views, _ = _safe_get(f"{BASE}/repos/{full_name}/traffic/views", h)
     if metrics is None or "clones" in metrics:
@@ -583,12 +584,18 @@ def get_repo_traffic(token: str, full_name: str, metrics: list = None) -> dict:
         refs, _ = _safe_get(f"{BASE}/repos/{full_name}/traffic/popular/referrers", h)
     if metrics is None or "paths" in metrics:
         paths, _ = _safe_get(f"{BASE}/repos/{full_name}/traffic/popular/paths", h)
+    if metrics is None or "releases" in metrics:
+        try:
+            releases_count = _count_via_link_header(f"{BASE}/repos/{full_name}/releases", h)
+        except Exception as exc:
+            logger.warning("Could not fetch releases count for %s: %s", full_name, exc)
 
     return {
         "views": views if isinstance(views, dict) else {},
         "clones": clones if isinstance(clones, dict) else {},
         "referrers": refs if isinstance(refs, list) else [],
         "paths": paths if isinstance(paths, list) else [],
+        "releases": releases_count,
     }
 
 
@@ -664,6 +671,8 @@ def build_tidy_rows(repo: dict, traffic: dict, metrics: list = None) -> list[dic
             row["stars"] = repo.get("stargazers_count", 0)
         if metrics is None or "forks" in metrics:
             row["forks"] = repo.get("forks_count", 0)
+        if metrics is None or "releases" in metrics:
+            row["releases"] = traffic.get("releases", 0)
 
         # Repo metadata that the deep dashboard needs
         if metrics is None or "language" in metrics:

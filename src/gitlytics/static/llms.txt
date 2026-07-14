@@ -8,6 +8,7 @@ Gitlytics is an open-source GitHub analytics and customization platform providin
 - [Homepage](https://gitlytics.dev) : Main marketing site with features, architecture, and live examples.
 - [Documentation](https://docs.gitlytics.dev) : Setup guides, CLI reference, library configurations, and API documentation.
 - [Cloud Dashboard](https://dashboard.gitlytics.dev) : Hosted SaaS platform with automated backups and team management.
+- [Blog](https://blog.gitlytics.dev) : Engineering deep-dives, comparison guides, and product updates (including "What is Gitlytics?").
 - [GitHub Core Repository](https://github.com/ameyac11/gitlytics) : Core library, REST API backend, CLI, and local dashboard server.
 - [Traffic Sync Automation Repository](https://github.com/ameyac11/gitlytics-github-traffic-automation) : Composite GitHub Action to persist repository metrics beyond the 14-day limit.
 - [Full LLMs Context](https://gitlytics.dev/llms-full.txt) : Complete plain-text documentation for LLM ingestion.
