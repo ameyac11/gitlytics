@@ -47,13 +47,24 @@ class StargazersRestrictedError(Exception):
     """
 
 
+def format_auth_header(token: str | None) -> str | None:
+    if not token:
+        return None
+    tok = str(token).strip()
+    if not tok:
+        return None
+    if tok.startswith("Bearer ") or tok.startswith("token "):
+        return tok
+    return f"Bearer {tok}"
+
+
 def make_headers(token: str) -> dict:
     # Auth headers for authenticated API calls
-    # GitHub Classic PATs require the `token` prefix, not `Bearer`.
-    return {
-        "Authorization": f"token {token}",
-        **_GITHUB_BASE_HEADERS,
-    }
+    auth = format_auth_header(token)
+    h = {**_GITHUB_BASE_HEADERS}
+    if auth:
+        h["Authorization"] = auth
+    return h
 
 
 def validate_token(token: str) -> tuple[bool, str]:
@@ -400,17 +411,13 @@ def get_single_repo(token: str, full_name: str) -> dict:
 
 
 def _star_headers(token: str | None) -> dict:
-    # Headers for the stargazers endpoint — needs the star+json media type
-    # so each item carries `starred_at`. Token is optional for public reads.
-    # Merge order matters: star+json must land AFTER the base headers so it
-    # overrides the default Accept (otherwise GitHub returns bare user objects).
-    # GitHub Classic PATs require the `token` prefix, not `Bearer`.
     h = {
         **_GITHUB_BASE_HEADERS,
         "Accept": "application/vnd.github.star+json",
     }
-    if token:
-        h["Authorization"] = f"token {token}"
+    auth = format_auth_header(token)
+    if auth:
+        h["Authorization"] = auth
     return h
 
 
@@ -444,105 +451,103 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
     headers = _star_headers(token)
     per_page = _PER_PAGE
     points: list[dict] = []
-    # Choose strategy based on repo size so small repos get a real
-    # datewise timeline (every individual star) while large repos use
-    # sampling to stay under rate limits.
-    SMALL_THRESHOLD = 200
-    if total_stars <= SMALL_THRESHOLD:
-        # Walk every page at smaller page size for finer granularity.
-        small_per_page = 30
-        total_pages = (total_stars + small_per_page - 1) // small_per_page
-        for p in range(1, total_pages + 1):
-            try:
-                r = requests.get(
-                    f"{BASE}/repos/{owner}/{repo}/stargazers",
-                    headers=headers,
-                    params={"page": p, "per_page": small_per_page},
-                    timeout=10,
-                )
-            except Exception as exc:
-                logger.warning(f"Stargazers fetch failed for {owner}/{repo} page {p}: {exc}")
-                continue
-            if r.status_code in (403, 429):
-                raise GitHubRateLimitError("GitHub rate limit reached, try again later")
-            if r.status_code == 404:
-                raise StargazersRestrictedError(
-                    "GitHub restricted the stargazers endpoint as of June 30, 2026. "
-                    "Star history is only available for repositories you own or collaborate on."
-                )
-            if r.status_code != 200:
-                logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
-                continue
-            items = r.json()
-            if not isinstance(items, list):
-                continue
-            for offset in range(len(items)):
-                item = items[offset]
-                if not isinstance(item, dict):
+
+    try:
+        # Choose strategy based on repo size so small repos get a real
+        # datewise timeline (every individual star) while large repos use
+        # sampling to stay under rate limits.
+        SMALL_THRESHOLD = 200
+        if total_stars <= SMALL_THRESHOLD:
+            # Walk every page at smaller page size for finer granularity.
+            small_per_page = 30
+            total_pages = (total_stars + small_per_page - 1) // small_per_page
+            for p in range(1, total_pages + 1):
+                try:
+                    r = requests.get(
+                        f"{BASE}/repos/{owner}/{repo}/stargazers",
+                        headers=headers,
+                        params={"page": p, "per_page": small_per_page},
+                        timeout=10,
+                    )
+                except Exception as exc:
+                    logger.warning(f"Stargazers fetch failed for {owner}/{repo} page {p}: {exc}")
                     continue
-                starred_at = item.get("starred_at")
+                if r.status_code in (403, 429, 404):
+                    logger.warning(f"Stargazers endpoint restricted/limited (HTTP {r.status_code}) for {owner}/{repo}")
+                    break
+                if r.status_code != 200:
+                    logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
+                    continue
+                items = r.json()
+                if not isinstance(items, list):
+                    continue
+                for offset in range(len(items)):
+                    item = items[offset]
+                    if not isinstance(item, dict):
+                        continue
+                    starred_at = item.get("starred_at")
+                    if not starred_at:
+                        continue
+                    # GitHub returns oldest-first; map the index to the
+                    # star's chronological position in the cumulative count.
+                    star_position = (p - 1) * small_per_page + offset + 1
+                    if star_position < 1:
+                        continue
+                    points.append({"date": str(starred_at)[:10], "total": star_position})
+        else:
+            # Pick 10 evenly-spaced pages across the available page range.
+            max_pages = 422
+            total_pages = min((total_stars + per_page - 1) // per_page, max_pages)
+            sample_count = 10
+            if total_pages <= sample_count:
+                sampled_pages = list(range(1, total_pages + 1))
+            else:
+                sampled_pages = sorted({
+                    1 + round(i * (total_pages - 1) / (sample_count - 1))
+                    for i in range(sample_count)
+                })
+            for p in sampled_pages:
+                try:
+                    r = requests.get(
+                        f"{BASE}/repos/{owner}/{repo}/stargazers",
+                        headers=headers,
+                        params={"page": p, "per_page": per_page},
+                        timeout=10,
+                    )
+                except Exception as exc:
+                    logger.warning(f"Stargazers fetch failed for {owner}/{repo} page {p}: {exc}")
+                    continue
+                if r.status_code in (403, 429):
+                    raise GitHubRateLimitError("GitHub rate limit reached, try again later")
+                if r.status_code == 404:
+                    raise StargazersRestrictedError(
+                        "GitHub restricted the stargazers endpoint as of June 30, 2026. "
+                        "Star history is only available for repositories you own or collaborate on."
+                    )
+                if r.status_code != 200:
+                    logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
+                    continue
+                items = r.json()
+                if not isinstance(items, list) or not items:
+                    continue
+                last = items[-1]
+                if not isinstance(last, dict):
+                    continue
+                starred_at = last.get("starred_at")
                 if not starred_at:
                     continue
-                # GitHub returns oldest-first; map the index to the
-                # star's chronological position in the cumulative count.
-                star_position = (p - 1) * small_per_page + offset + 1
+                offset = len(items) - 1
+                star_position = (p - 1) * per_page + offset + 1
                 if star_position < 1:
                     continue
                 points.append({"date": str(starred_at)[:10], "total": star_position})
-    else:
-        # Pick 10 evenly-spaced pages across the available page range. GitHub
-        # only keeps the last ~420 pages of stargazers even for huge repos so
-        # we cap at 422 to avoid 422s on the upper bound. For each sampled
-        # page, take the LAST item (oldest star in that page) so the 10
-        # samples spread across the repo's full lifetime rather than
-        # clustering on the most recent stars.
-        max_pages = 422
-        total_pages = min((total_stars + per_page - 1) // per_page, max_pages)
-        sample_count = 10
-        if total_pages <= sample_count:
-            sampled_pages = list(range(1, total_pages + 1))
-        else:
-            sampled_pages = sorted({
-                1 + round(i * (total_pages - 1) / (sample_count - 1))
-                for i in range(sample_count)
-            })
-        for p in sampled_pages:
-            try:
-                r = requests.get(
-                    f"{BASE}/repos/{owner}/{repo}/stargazers",
-                    headers=headers,
-                    params={"page": p, "per_page": per_page},
-                    timeout=10,
-                )
-            except Exception as exc:
-                logger.warning(f"Stargazers fetch failed for {owner}/{repo} page {p}: {exc}")
-                continue
-            if r.status_code in (403, 429):
-                raise GitHubRateLimitError("GitHub rate limit reached, try again later")
-            if r.status_code == 404:
-                raise StargazersRestrictedError(
-                    "GitHub restricted the stargazers endpoint as of June 30, 2026. "
-                    "Star history is only available for repositories you own or collaborate on."
-                )
-            if r.status_code != 200:
-                logger.warning(f"Stargazers page {p} returned HTTP {r.status_code}")
-                continue
-            items = r.json()
-            if not isinstance(items, list) or not items:
-                continue
-            # Take the LAST (newest) item in this page. The cumulative
-            # position of items[-1] on page p is: (p - 1) * per_page + offset + 1.
-            last = items[-1]
-            if not isinstance(last, dict):
-                continue
-            starred_at = last.get("starred_at")
-            if not starred_at:
-                continue
-            offset = len(items) - 1
-            star_position = (p - 1) * per_page + offset + 1
-            if star_position < 1:
-                continue
-            points.append({"date": str(starred_at)[:10], "total": star_position})
+    except (GitHubRateLimitError, StargazersRestrictedError):
+        raise
+    except Exception as exc:
+        logger.warning("Stargazers history fetch exception for %s/%s: %s", owner, repo, exc)
+
+    if not points:
+        return [{"date": today_str, "total": total_stars}]
 
     # Build a per-day cumulative timeline. Each entry means "by end of <date>,
     # this repo had <total> stars". Today always equals the live stargazers
