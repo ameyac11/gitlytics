@@ -472,7 +472,7 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
                 except Exception as exc:
                     logger.warning(f"Stargazers fetch failed for {owner}/{repo} page {p}: {exc}")
                     continue
-                if r.status_code in (403, 429, 404):
+                if r.status_code in (401, 403, 429, 404):
                     logger.warning(f"Stargazers endpoint restricted/limited (HTTP {r.status_code}) for {owner}/{repo}")
                     break
                 if r.status_code != 200:
