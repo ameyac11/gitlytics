@@ -547,6 +547,25 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
         logger.warning("Stargazers history fetch exception for %s/%s: %s", owner, repo, exc)
 
     if not points:
+        # Fallback: Query repo /events endpoint for WatchEvent timestamps
+        try:
+            r_ev = requests.get(f"{BASE}/repos/{owner}/{repo}/events", headers=headers, timeout=10)
+            if r_ev.status_code == 200 and isinstance(r_ev.json(), list):
+                events = r_ev.json()
+                watch_dates = sorted([
+                    str(e.get("created_at"))[:10]
+                    for e in events
+                    if isinstance(e, dict) and e.get("type") == "WatchEvent" and e.get("created_at")
+                ])
+                if watch_dates:
+                    count = 0
+                    for d in watch_dates:
+                        count += 1
+                        points.append({"date": d, "total": count})
+        except Exception as ev_exc:
+            logger.warning(f"Events fallback failed for {owner}/{repo}: {ev_exc}")
+
+    if not points:
         return [{"date": today_str, "total": total_stars}]
 
     # Build a per-day cumulative timeline. Each entry means "by end of <date>,
