@@ -559,6 +559,16 @@ def fetch_star_history(owner: str, repo: str, token: str | None = None) -> list[
     if not per_day_max or max(per_day_max.values()) < total_stars:
         per_day_max[today_str] = total_stars
 
+    # Always ensure a start date (repo creation date or 30 days prior at 0 stars)
+    # so the timeline renders a clean line graph instead of a single floating dot.
+    created_at_raw = meta.get("created_at") if isinstance(meta, dict) else None
+    start_date = str(created_at_raw)[:10] if created_at_raw else (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    if start_date >= today_str:
+        start_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+
+    if start_date not in per_day_max:
+        per_day_max[start_date] = 0
+
     # Convert raw "max position on this day" into a running cumulative count.
     # Stars are monotone — total can never decrease across dates.
     sorted_dates = sorted(per_day_max.keys())
