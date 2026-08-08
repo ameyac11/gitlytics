@@ -88,14 +88,14 @@ class TestGetUserProfile:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "login": "ameyac11",
+            "login": "ameyachopade",
             "name": "Ameya Chopade",
             "avatar_url": "https://avatars.githubusercontent.com/u/123"
         }
         mock_get.return_value = mock_response
 
         profile = get_user_profile("token")
-        assert profile["login"] == "ameyac11"
+        assert profile["login"] == "ameyachopade"
         assert profile["name"] == "Ameya Chopade"
         assert profile["avatar_url"].startswith("https://")
 
@@ -104,11 +104,11 @@ class TestGetUserProfile:
         # GitHub allows users to leave their display name blank — fall back to username
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"login": "ameyac11", "name": None, "avatar_url": "https://x"}
+        mock_response.json.return_value = {"login": "ameyachopade", "name": None, "avatar_url": "https://x"}
         mock_get.return_value = mock_response
 
         profile = get_user_profile("token")
-        assert profile["name"] == "ameyac11"  # login used as fallback
+        assert profile["name"] == "ameyachopade"  # login used as fallback
 
     @patch("gitlytics.core.requests.get")
     def test_non_200_returns_empty_strings(self, mock_get):

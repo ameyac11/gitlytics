@@ -40,7 +40,7 @@ history = gitlytics.fetch_star_history(owner="owner", repo="repo")
 
 ## 3. GitHub Action — Traffic Sync Automation
 
-The composite GitHub Action `ameyac11/gitlytics-github-traffic-automation` schedules regular backups to defeat GitHub's 14-day data retention limit.
+The composite GitHub Action `ameyachopade/gitlytics-github-traffic-automation` schedules regular backups to defeat GitHub's 14-day data retention limit.
 
 ### Configuration (`.github/workflows/traffic.yml`)
 
@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Sync Traffic Data
-        uses: ameyac11/gitlytics-github-traffic-automation@v1
+        uses: ameyachopade/gitlytics-github-traffic-automation@v1
         with:
           traffic_token: ${{ secrets.TRAFFIC_TOKEN }}
           data_dir: "data/"
@@ -110,5 +110,5 @@ Generates developer tech stack badges and colored pills.
 - Documentation: https://docs.gitlytics.dev
 - Application: https://dashboard.gitlytics.dev
 - Blog: https://blog.gitlytics.dev (includes "What is Gitlytics?")
-- Main Repo: https://github.com/ameyac11/gitlytics
-- Action Repo: https://github.com/ameyac11/gitlytics-github-traffic-automation
+- Main Repo: https://github.com/ameyachopade/gitlytics
+- Action Repo: https://github.com/ameyachopade/gitlytics-github-traffic-automation

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/ameyac11/gitlytics/main/assets/logo.png" alt="Gitlytics Logo" width="150" />
+<img src="https://raw.githubusercontent.com/ameyachopade/gitlytics/main/assets/logo.png" alt="Gitlytics Logo" width="150" />
 
 # Gitlytics v0.6.3
 ### GitHub Traffic Analytics, Dynamic Widgets & Automation
@@ -10,7 +10,7 @@
 [![PyPI](https://api.gitlytics.dev/api/badge/pypi/gitlytics.svg)](https://pypi.org/project/gitlytics/)
 [![React](https://api.gitlytics.dev/api/badge/tech.svg?slug=react&style=icon_label_value&label=UI&label_color=%23555555&variant=plastic&value=React&value_color=%2361DAFB)](https://react.dev/)
 [![FastAPI](https://api.gitlytics.dev/api/badge/tech.svg?slug=fastapi&style=icon_label_value&label=Backend&label_color=%23555555&variant=plastic&value=FastAPI&value_color=%23009688)](https://fastapi.tiangolo.com/)
-[![Automation](https://api.gitlytics.dev/api/badge/tech.svg?slug=githubactions&style=icon_label_value&label=Data+Backup&label_color=%23555555&variant=plastic&value=Automation&value_color=%232088FF)](https://github.com/ameyac11/gitlytics-github-traffic-automation)
+[![Automation](https://api.gitlytics.dev/api/badge/tech.svg?slug=githubactions&style=icon_label_value&label=Data+Backup&label_color=%23555555&variant=plastic&value=Automation&value_color=%232088FF)](https://github.com/ameyachopade/gitlytics-github-traffic-automation)
 [![Homepage](https://api.gitlytics.dev/api/badge/tech.svg?slug=homepage&style=icon_label_value&label=Homepage&label_color=%23555555&variant=plastic&value=gitlytics.dev&value_color=%233FB950)](https://gitlytics.dev)
 [![Blog](https://api.gitlytics.dev/api/badge/tech.svg?slug=blog&style=icon_label_value&label=Blog&label_color=%23555555&variant=plastic&value=blog.gitlytics.dev&value_color=%233FB950)](https://blog.gitlytics.dev)
 [![Live](https://api.gitlytics.dev/api/badge/tech.svg?slug=livedemo&style=icon_label_value&label=Live+Demo&label_color=%23555555&variant=plastic&value=dashboard.gitlytics.dev&value_color=%233FB950)](https://dashboard.gitlytics.dev)
@@ -129,7 +129,7 @@ The full Gitlytics platform consists of modular open-source components:
 - 📊 **[Gitlytics Live Dashboard](https://dashboard.gitlytics.dev)**: Production web interface to visualize repository traffic, trends, and historical charts.
 - 📝 **[Gitlytics Blog](https://blog.gitlytics.dev)**: Engineering deep-dives, comparison guides, and open-source analytics tutorials.
 - 📚 **[Gitlytics Metadata Pages & Docs](https://docs.gitlytics.dev)**: Technical reference, badge explorer, and CLI documentation.
-- ⚙️ **[Gitlytics Automation](https://github.com/ameyac11/gitlytics-github-traffic-automation)**: GitHub Action companion tool that fetches and backs up traffic data automatically.
+- ⚙️ **[Gitlytics Automation](https://github.com/ameyachopade/gitlytics-github-traffic-automation)**: GitHub Action companion tool that fetches and backs up traffic data automatically.
 
 ---
 
@@ -173,7 +173,7 @@ Gitlytics v0.6.3 supports 3 authentication modes:
 
 We built a companion automation tool that runs silently every 13 days using GitHub Actions to snapshot and preserve your traffic data.
 
-👉 **[Set up GitHub Traffic Automation here](https://github.com/ameyac11/gitlytics-github-traffic-automation)** (Takes under 2 minutes to set up!)
+👉 **[Set up GitHub Traffic Automation here](https://github.com/ameyachopade/gitlytics-github-traffic-automation)** (Takes under 2 minutes to set up!)
 
 Once your traffic snapshots are saved, Gitlytics automatically merges overlaps to build continuous historical analytics over months or years.
 
@@ -275,7 +275,7 @@ gitlytics.serve_dashboard(
 import gitlytics
 
 points = gitlytics.fetch_star_history(
-    owner="ameyac11",
+    owner="ameyachopade",
     repo="gitlytics",
     token="ghp_your_token"
 )
@@ -317,7 +317,7 @@ Local CSV databases track up to 23 metrics per snapshot:
 
 ## 🌟 Show Your Support
 
-If you find this project useful, please consider giving it a ⭐ on [GitHub](https://github.com/ameyac11/gitlytics)!
+If you find this project useful, please consider giving it a ⭐ on [GitHub](https://github.com/ameyachopade/gitlytics)!
 
 ## 📄 License
 Licensed under the [Apache License 2.0](LICENSE).

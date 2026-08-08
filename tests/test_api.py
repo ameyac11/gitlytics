@@ -94,9 +94,9 @@ class TestConfigEndpoint:
 # ── /api/auth ──────────────────────────────────────────────────────────────────
 
 class TestAuthEndpoint:
-    @patch("gitlytics.api.validate_token", return_value=(True, "ameyac11"))
+    @patch("gitlytics.api.validate_token", return_value=(True, "ameyachopade"))
     @patch("gitlytics.api.get_user_profile", return_value={
-        "login": "ameyac11", "name": "Ameya Chopade", "avatar_url": "https://avatars.github.com/u/1"
+        "login": "ameyachopade", "name": "Ameya Chopade", "avatar_url": "https://avatars.github.com/u/1"
     })
     def test_valid_token_returns_authenticated(self, mock_profile, mock_validate):
         # A valid token should give back authenticated=True with the user's profile
@@ -104,7 +104,7 @@ class TestAuthEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["authenticated"] is True
-        assert data["username"] == "ameyac11"
+        assert data["username"] == "ameyachopade"
         assert data["name"] == "Ameya Chopade"
         assert "avatar_url" in data
 
@@ -122,9 +122,9 @@ class TestAuthEndpoint:
             response = client.post("/api/auth", json={"token": ""})
         assert response.status_code == 401
 
-    @patch("gitlytics.api.validate_token", return_value=(True, "ameyac11"))
+    @patch("gitlytics.api.validate_token", return_value=(True, "ameyachopade"))
     @patch("gitlytics.api.get_user_profile", return_value={
-        "login": "ameyac11", "name": "Ameya Chopade", "avatar_url": "https://avatars.github.com/u/1"
+        "login": "ameyachopade", "name": "Ameya Chopade", "avatar_url": "https://avatars.github.com/u/1"
     })
     def test_response_has_all_profile_fields(self, mock_profile, mock_validate):
         # The dashboard needs login, name, and avatar_url — all three must be present
@@ -133,9 +133,9 @@ class TestAuthEndpoint:
         assert "name" in data
         assert "avatar_url" in data
 
-    @patch("gitlytics.api.validate_token", return_value=(True, "ameyac11"))
+    @patch("gitlytics.api.validate_token", return_value=(True, "ameyachopade"))
     @patch("gitlytics.api.get_user_profile", return_value={
-        "login": "ameyac11", "name": "", "avatar_url": ""
+        "login": "ameyachopade", "name": "", "avatar_url": ""
     })
     def test_null_display_name_falls_back_to_login(self, mock_profile, mock_validate):
         # If the user has no display name set on GitHub, fall back to their username

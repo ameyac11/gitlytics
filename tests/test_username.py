@@ -25,22 +25,22 @@ class TestGetPublicUser:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
-            "login": "ameyac11",
+            "login": "ameyachopade",
             "name": "Ameya Chopade",
             "avatar_url": "https://avatars.githubusercontent.com/u/1",
             "bio": "Developer",
             "location": "India",
             "blog": "https://example.com",
-            "twitter_username": "ameyac11",
-            "html_url": "https://github.com/ameyac11",
+            "twitter_username": "ameyachopade",
+            "html_url": "https://github.com/ameyachopade",
             "followers": 100,
             "following": 50,
             "public_repos": 20,
             "created_at": "2020-01-01T00:00:00Z",
         }
         mock_get.return_value = mock_resp
-        profile = get_public_user("ameyac11")
-        assert profile["login"] == "ameyac11"
+        profile = get_public_user("ameyachopade")
+        assert profile["login"] == "ameyachopade"
         assert profile["name"] == "Ameya Chopade"
         assert profile["followers"] == 100
         assert profile["public_repos"] == 20
@@ -70,8 +70,8 @@ class TestGetPublicUser:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         mock_get.return_value = mock_resp
-        with pytest.raises(ValueError, match="ameyac11"):
-            get_public_user("ameyac11")
+        with pytest.raises(ValueError, match="ameyachopade"):
+            get_public_user("ameyachopade")
 
     @patch("gitlytics.core.requests.get")
     def test_network_error_raises_runtime_error(self, mock_get):
@@ -252,37 +252,37 @@ class TestUsernameEndpoint:
         return _client.post("/api/username", json={"username": username})
 
     @patch("gitlytics.api.get_public_user", return_value={
-        "login": "ameyac11", "name": "Ameya", "avatar_url": "https://x",
-        "html_url": "https://github.com/ameyac11",
+        "login": "ameyachopade", "name": "Ameya", "avatar_url": "https://x",
+        "html_url": "https://github.com/ameyachopade",
         "followers": 10, "following": 5, "public_repos": 3, "created_at": "",
     })
     @patch("gitlytics.api.get_public_repos", return_value=[])
     def test_valid_username_returns_200(self, mock_repos, mock_user):
         # A valid username must return HTTP 200 with profile and repos
-        response = self._post("ameyac11")
+        response = self._post("ameyachopade")
         assert response.status_code == 200
 
     @patch("gitlytics.api.get_public_user", return_value={
-        "login": "ameyac11", "name": "Ameya", "avatar_url": "https://x",
-        "html_url": "https://github.com/ameyac11",
+        "login": "ameyachopade", "name": "Ameya", "avatar_url": "https://x",
+        "html_url": "https://github.com/ameyachopade",
         "followers": 10, "following": 5, "public_repos": 3, "created_at": "",
     })
     @patch("gitlytics.api.get_public_repos", return_value=[])
     def test_response_has_profile_and_repos_keys(self, mock_repos, mock_user):
         # The response body must have 'profile' and 'repos' at the top level
-        data = self._post("ameyac11").json()
+        data = self._post("ameyachopade").json()
         assert "profile" in data
         assert "repos" in data
 
     @patch("gitlytics.api.get_public_user", return_value={
-        "login": "ameyac11", "name": "Ameya", "avatar_url": "https://x",
-        "html_url": "https://github.com/ameyac11",
+        "login": "ameyachopade", "name": "Ameya", "avatar_url": "https://x",
+        "html_url": "https://github.com/ameyachopade",
         "followers": 10, "following": 5, "public_repos": 3, "created_at": "",
     })
-    @patch("gitlytics.api.get_public_repos", return_value=[{"name": "repo1", "full_name": "ameyac11/repo1"}])
+    @patch("gitlytics.api.get_public_repos", return_value=[{"name": "repo1", "full_name": "ameyachopade/repo1"}])
     def test_repos_is_a_list(self, mock_repos, mock_user):
         # The repos field must always be a list (even if empty)
-        data = self._post("ameyac11").json()
+        data = self._post("ameyachopade").json()
         assert isinstance(data["repos"], list)
 
     def test_empty_username_returns_400(self):
@@ -309,24 +309,24 @@ class TestUsernameEndpoint:
         assert response.status_code == 500
 
     @patch("gitlytics.api.get_public_user", return_value={
-        "login": "ameyac11", "name": "Ameya", "avatar_url": "https://x",
-        "html_url": "https://github.com/ameyac11",
+        "login": "ameyachopade", "name": "Ameya", "avatar_url": "https://x",
+        "html_url": "https://github.com/ameyachopade",
         "followers": 10, "following": 5, "public_repos": 3, "created_at": "",
     })
     @patch("gitlytics.api.get_public_repos", return_value=[])
     def test_profile_has_login_field(self, mock_repos, mock_user):
         # The profile dict inside the response must contain login at minimum
-        data = self._post("ameyac11").json()
-        assert data["profile"]["login"] == "ameyac11"
+        data = self._post("ameyachopade").json()
+        assert data["profile"]["login"] == "ameyachopade"
 
     @patch("gitlytics.api.get_public_user", return_value={
-        "login": "ameyac11", "name": "Ameya", "avatar_url": "https://x",
-        "html_url": "https://github.com/ameyac11",
+        "login": "ameyachopade", "name": "Ameya", "avatar_url": "https://x",
+        "html_url": "https://github.com/ameyachopade",
         "followers": 50, "following": 5, "public_repos": 12, "created_at": "",
     })
     @patch("gitlytics.api.get_public_repos", return_value=[])
     def test_username_stripped_before_lookup(self, mock_repos, mock_user):
         # Leading/trailing whitespace around username must be stripped before the API call
-        response = self._post("  ameyac11  ")
+        response = self._post("  ameyachopade  ")
         assert response.status_code == 200
-        mock_user.assert_called_once_with("ameyac11")
+        mock_user.assert_called_once_with("ameyachopade")

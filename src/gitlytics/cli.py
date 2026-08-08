@@ -84,7 +84,7 @@ def main():
 
     # ── STARS subcommand ───────────────────────────────────────────────────────
     stars_parser = subparsers.add_parser("stars", help="Fetch sampled star history for a repo (Rarely used/Deprecated by GitHub API).")
-    stars_parser.add_argument("repo", help="Repository in 'owner/repo' form (e.g. ameyac11/gitlytics).")
+    stars_parser.add_argument("repo", help="Repository in 'owner/repo' form (e.g. ameyachopade/gitlytics).")
     stars_parser.add_argument("-t", "--token", help="GitHub Personal Access Token.")
 
     args = parser.parse_args()

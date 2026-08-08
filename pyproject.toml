@@ -38,8 +38,8 @@ classifiers = [
 [project.urls]
 Homepage = "https://gitlytics.dev"
 Documentation = "https://docs.gitlytics.dev"
-Repository = "https://github.com/ameyac11/gitlytics"
-"Bug Tracker" = "https://github.com/ameyac11/gitlytics/issues"
+Repository = "https://github.com/ameyachopade/gitlytics"
+"Bug Tracker" = "https://github.com/ameyachopade/gitlytics/issues"
 
 [project.optional-dependencies]
 # Fix #20: dashboard extras are optional — base package works without them.
